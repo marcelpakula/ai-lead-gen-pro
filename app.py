@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import json
-from datetime import datetime
+from datetime import datetime, date
 
 st.set_page_config(page_title="AI Lead Gen PRO", layout="wide")
 
@@ -18,7 +18,6 @@ div[data-testid="stButton"] > button[kind="primary"] { background: linear-gradie
 div[data-testid="stButton"] > button[kind="secondary"] { background: #ffffff !important; color: #2563eb !important; border: 1.5px solid #2563eb !important; border-radius: 8px !important; font-weight: 600 !important; }
 div[data-testid="stDownloadButton"] > button { background: #f0fdf4 !important; color: #16a34a !important; border: 1.5px solid #16a34a !important; border-radius: 8px !important; font-weight: 600 !important; width: 100% !important; }
 .stDataFrame thead th { background: #f1f5f9 !important; color: #2563eb !important; font-size: 0.72rem !important; text-transform: uppercase !important; }
-[data-testid="stMetricValue"] { color: #2563eb !important; font-family: 'Space Grotesk', sans-serif !important; font-size: 1.9rem !important; font-weight: 700 !important; }
 .stTabs [data-baseweb="tab-list"] { background: #f1f5f9 !important; border-radius: 10px !important; padding: 4px !important; }
 .stTabs [aria-selected="true"] { background: #ffffff !important; color: #2563eb !important; font-weight: 700 !important; }
 .stProgress > div > div { background: linear-gradient(90deg, #2563eb, #7c3aed) !important; border-radius: 10px !important; }
@@ -27,36 +26,135 @@ div[data-testid="stDownloadButton"] > button { background: #f0fdf4 !important; c
 .kpi-val-red { color: #dc2626 !important; }
 .kpi-val-orange { color: #d97706 !important; }
 .kpi-val-purple { color: #7c3aed !important; }
+.kpi-val-green { color: #16a34a !important; }
 .kpi-label { font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.08em; margin-top: 0.4rem; font-weight: 600; }
 .info-box { background: #eff6ff; border: 1px solid #bfdbfe; border-left: 3px solid #2563eb; border-radius: 8px; padding: 0.9rem 1.1rem; font-size: 0.85rem; color: #1d4ed8; line-height: 1.6; }
+.warning-box { background: #fff7ed; border: 1px solid #fed7aa; border-left: 3px solid #ea580c; border-radius: 8px; padding: 0.9rem 1.1rem; font-size: 0.85rem; color: #9a3412; line-height: 1.6; }
 .app-title { font-family: 'Space Grotesk', sans-serif; font-size: 2rem; font-weight: 700; color: #0f172a; letter-spacing: -0.02em; }
 .accent { color: #2563eb; }
 .app-sub { font-size: 0.88rem; color: #94a3b8; margin-top: 0.3rem; }
 hr { border: none; border-top: 1px solid #e2e8f0; margin: 1.2rem 0; }
 .section-header { font-family: 'Space Grotesk', sans-serif; font-size: 1rem; font-weight: 700; color: #1e293b; margin-bottom: 1rem; }
-.prod-badge { background: #f0fdf4; color: #16a34a; border: 1.5px solid #16a34a; border-radius: 20px; padding: 4px 14px; font-size: 0.72rem; font-weight: 700; }
-.dev-badge { background: #fff7ed; color: #ea580c; border: 1.5px solid #ea580c; border-radius: 20px; padding: 4px 14px; font-size: 0.72rem; font-weight: 700; }
+.login-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 20px; padding: 3rem 2.5rem; max-width: 460px; margin: 4rem auto; box-shadow: 0 4px 24px rgba(0,0,0,0.08); text-align: center; }
+.login-title { font-family: 'Space Grotesk', sans-serif; font-size: 1.8rem; font-weight: 700; color: #0f172a; margin-bottom: 0.5rem; }
+.login-sub { font-size: 0.9rem; color: #94a3b8; margin-bottom: 2rem; }
+.skany-bar { background: #f1f5f9; border-radius: 10px; padding: 0.7rem 1rem; font-size: 0.8rem; color: #475569; text-align: center; margin-top: 0.5rem; }
 </style>
 """, unsafe_allow_html=True)
 
-# ── KLUCZE API ──
+# ── KONFIGURACJA ──
+SHEET_ID = "1-BUQR07uJmCOwWbk3gFiFywqqHtBDOUsa8hv6M9MAjs"
+SHEET_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=0"
+
 def get_keys():
     try:
-        ak = st.secrets["ANTHROPIC_API_KEY"]
-        sk = st.secrets["SERPER_API_KEY"]
-        return ak, sk, True
+        return st.secrets["ANTHROPIC_API_KEY"], st.secrets["SERPER_API_KEY"]
     except:
-        return None, None, False
+        return None, None
 
-AK_SECRET, SK_SECRET, TRYB_PROD = get_keys()
+AK, SK = get_keys()
 
+WOJEWODZTWA = ["Dolnoslaskie","Kujawsko-Pomorskie","Lubelskie","Lubuskie","Lodzkie","Malopolskie","Mazowieckie","Opolskie","Podkarpackie","Podlaskie","Pomorskie","Slaskie","Swietokrzyskie","Warminsko-Mazurskie","Wielkopolskie","Zachodniopomorskie"]
+SIECIOWKI = ["mcdonald","kfc","burger king","biedronka","lidl","zabka","orlen","bp","shell","ikea","media markt","rossmann","douglas","reserved","h&m","zara","deichmann","pepco","action","neonet","decathlon","leroy merlin","castorama","obi ","jysk","empik"]
+
+# ── SYSTEM KODOW DOSTEPU ──
+def wczytaj_kody():
+    try:
+        df = pd.read_csv(SHEET_URL)
+        df.columns = df.columns.str.strip().str.lower()
+        return df
+    except Exception as e:
+        return None
+
+def weryfikuj_kod(kod_input):
+    df = wczytaj_kody()
+    if df is None:
+        return False, "Blad polaczenia z baza kodow. Sprobuj za chwile.", None
+    
+    df_kod = df[df["kod"].astype(str).str.upper() == kod_input.upper()]
+    
+    if df_kod.empty:
+        return False, "Nieprawidlowy kod dostepu.", None
+    
+    row = df_kod.iloc[0]
+    
+    if str(row.get("aktywny","")).upper() != "TAK":
+        return False, "Ten kod zostal dezaktywowany.", None
+    
+    try:
+        data_wygasniecia = datetime.strptime(str(row["data_wygasniecia"]), "%Y-%m-%d").date()
+        if date.today() > data_wygasniecia:
+            return False, f"Ten kod wygasl {data_wygasniecia}. Odnow subskrypcje.", None
+    except:
+        pass
+    
+    skany_wykorzystane = int(row.get("skany_wykorzystane", 0))
+    max_skanow = int(row.get("max_skanow", 50))
+    
+    if skany_wykorzystane >= max_skanow:
+        return False, f"Wykorzystales wszystkie skany ({max_skanow}/{max_skanow}). Czekaj na reset miesięczny.", None
+    
+    return True, "OK", {
+        "kod": str(row["kod"]),
+        "skany_wykorzystane": skany_wykorzystane,
+        "max_skanow": max_skanow,
+        "pozostalo": max_skanow - skany_wykorzystane,
+        "data_wygasniecia": str(row.get("data_wygasniecia", ""))
+    }
+
+# ── SESSION STATE ──
+if "zalogowany" not in st.session_state:
+    st.session_state.zalogowany = False
+if "kod_info" not in st.session_state:
+    st.session_state.kod_info = None
 if "historia" not in st.session_state:
     st.session_state.historia = []
 if "tryb_modulu" not in st.session_state:
     st.session_state.tryb_modulu = "B2B"
 
-WOJEWODZTWA = ["Dolnoslaskie","Kujawsko-Pomorskie","Lubelskie","Lubuskie","Lodzkie","Malopolskie","Mazowieckie","Opolskie","Podkarpackie","Podlaskie","Pomorskie","Slaskie","Swietokrzyskie","Warminsko-Mazurskie","Wielkopolskie","Zachodniopomorskie"]
-SIECIOWKI = ["mcdonald","kfc","burger king","biedronka","lidl","zabka","orlen","bp","shell","ikea","media markt","rossmann","douglas","reserved","h&m","zara","deichmann","pepco","action","neonet","decathlon","leroy merlin","castorama","obi ","jysk","empik"]
+# ── EKRAN LOGOWANIA ──
+if not st.session_state.zalogowany:
+    st.markdown("""
+    <div class="login-card">
+        <div class="login-title">🔥 AI Lead Gen PRO</div>
+        <div class="login-sub">Automatyczny skaner B2B + B2C z analizą Claude AI<br>Wpisz swój kod dostępu aby kontynuować</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col_l, col_c, col_r = st.columns([1, 2, 1])
+    with col_c:
+        st.markdown("<br><br><br><br>", unsafe_allow_html=True)
+        kod_input = st.text_input(
+            "Kod dostępu",
+            placeholder="np. BETA2026",
+            help="Otrzymałeś kod po zakupie dostępu"
+        ).strip().upper()
+        
+        if st.button("🔓 ZALOGUJ SIĘ", type="primary", use_container_width=True):
+            if not kod_input:
+                st.error("Wpisz kod dostępu!")
+            else:
+                with st.spinner("Weryfikuję kod..."):
+                    ok, komunikat, info = weryfikuj_kod(kod_input)
+                if ok:
+                    st.session_state.zalogowany = True
+                    st.session_state.kod_info = info
+                    st.success("✅ Zalogowano! Przekierowuję...")
+                    st.rerun()
+                else:
+                    st.error(f"❌ {komunikat}")
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown(
+            '<div style="text-align:center;font-size:0.8rem;color:#94a3b8">'
+            'Nie masz kodu? <a href="#" style="color:#2563eb">Kup dostęp za 97 zł/miesiąc</a>'
+            '</div>',
+            unsafe_allow_html=True
+        )
+    st.stop()
+
+# ── APLIKACJA GLOWNA (po zalogowaniu) ──
+info = st.session_state.kod_info
 
 def generuj_zapytania_b2b(branza, lok, ak, tryb):
     if tryb == "Szybki (1 zapytanie)":
@@ -176,34 +274,28 @@ def analiza_b2c(produkt, problem, wyniki, ak):
         return {"gdzie_sa_klienci": "Grupy Facebook, fora tematyczne, OLX", "jak_dotrzec": "Meta Ads targetowane, posty w grupach", "hook_reklamowy": "Masz problem z " + problem + "? Mamy rozwiazanie!", "opis_klienta": "Osoba szukajaca: " + problem, "kanaly_priorytet": "1. Meta Ads  2. Grupy FB  3. TikTok", "cta": "Zamow " + produkt + " z darmowa dostawa"}
     try:
         zr = "\n".join(["- " + w["typ"] + ": " + w["zrodlo"] for w in wyniki[:8]])
-        r = requests.post("https://api.anthropic.com/v1/messages", headers={"x-api-key": ak, "anthropic-version": "2023-06-01", "content-type": "application/json"}, json={"model": "claude-haiku-4-5", "max_tokens": 500, "messages": [{"role": "user", "content": "Produkt: " + produkt + "\nProblem: " + problem + "\nZrodla:\n" + zr + "\nJSON: {\"gdzie_sa_klienci\": \"2-3 zdania\", \"jak_dotrzec\": \"3 zdania\", \"hook_reklamowy\": \"1 zdanie\", \"opis_klienta\": \"2 zdania\", \"kanaly_priorytet\": \"lista top 3 jako string np. 1. Meta Ads 2. Grupy FB 3. TikTok\", \"cta\": \"max 15 slow\"}"}]}, timeout=20)
+        r = requests.post("https://api.anthropic.com/v1/messages", headers={"x-api-key": ak, "anthropic-version": "2023-06-01", "content-type": "application/json"}, json={"model": "claude-haiku-4-5", "max_tokens": 500, "messages": [{"role": "user", "content": "Produkt: " + produkt + "\nProblem: " + problem + "\nZrodla:\n" + zr + "\nJSON: {\"gdzie_sa_klienci\": \"2-3 zdania\", \"jak_dotrzec\": \"3 zdania\", \"hook_reklamowy\": \"1 zdanie\", \"opis_klienta\": \"2 zdania\", \"kanaly_priorytet\": \"lista top 3 jako string\", \"cta\": \"max 15 slow\"}"}]}, timeout=20)
         t = r.json()["content"][0]["text"]
         wynik = json.loads(t[t.find("{"):t.rfind("}")+1])
         kp = wynik.get("kanaly_priorytet", "")
-        if isinstance(kp, list):
-            wynik["kanaly_priorytet"] = " | ".join([str(x) for x in kp])
+        if isinstance(kp, list): wynik["kanaly_priorytet"] = " | ".join([str(x) for x in kp])
         return wynik
     except:
         return {"gdzie_sa_klienci": "Blad", "jak_dotrzec": "Blad", "hook_reklamowy": "Blad", "opis_klienta": "Blad", "kanaly_priorytet": "Blad", "cta": "Blad"}
 
 # ── SIDEBAR ──
 with st.sidebar:
-    st.markdown("## Konfiguracja")
+    st.markdown("## Panel uzytkownika")
     st.markdown("---")
-    if TRYB_PROD:
-        st.markdown('<span class="prod-badge">✅ TRYB PRODUKCJA</span>', unsafe_allow_html=True)
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.success("Klucze API aktywne. Mozesz skanowac!")
-        ak = AK_SECRET
-        sk_key = SK_SECRET
-    else:
-        st.markdown('<span class="dev-badge">🔧 TRYB DEWELOPERSKI</span>', unsafe_allow_html=True)
-        st.markdown("<br>", unsafe_allow_html=True)
-        ak = st.text_input("Klucz Anthropic API", type="password", placeholder="sk-ant-api03-...")
-        sk_key = st.text_input("Klucz Serper API", type="password", placeholder="z serper.dev...")
-        c1, c2 = st.columns(2)
-        with c1: st.markdown("Claude: " + ("OK" if ak else "BRAK"))
-        with c2: st.markdown("Serper: " + ("OK" if sk_key else "BRAK"))
+    pozostalo = info["pozostalo"]
+    max_s = info["max_skanow"]
+    wykorzystane = info["skany_wykorzystane"]
+    procent = int((wykorzystane / max_s) * 100) if max_s > 0 else 0
+    kolor = "kpi-val-green" if pozostalo > 10 else ("kpi-val-orange" if pozostalo > 3 else "kpi-val-red")
+    st.markdown(f'<div class="kpi-card"><div class="kpi-val {kolor}">{pozostalo}</div><div class="kpi-label">Skanow pozostalo</div></div>', unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.progress(procent / 100)
+    st.markdown(f'<div class="skany-bar">Kod: <b>{info["kod"]}</b> | Wykorzystano: {wykorzystane}/{max_s} | Wygasa: {info["data_wygasniecia"]}</div>', unsafe_allow_html=True)
     st.markdown("---")
     st.markdown("### Ustawienia B2B")
     tryb_skanu = st.radio("Tryb skanu", ["Szybki (1 zapytanie)", "Sredni (3 zapytania)", "Masowy (6 zapytan AUTO)"])
@@ -214,7 +306,7 @@ with st.sidebar:
     bw = st.checkbox("Tylko BEZ strony WWW")
     bt = st.checkbox("Tylko Z telefonem", value=True)
     wykl = st.checkbox("Wykluczaj sieciowki", value=True)
-    weryfikuj = st.checkbox("Weryfikuj strony WWW", value=True)
+    weryfikuj_www = st.checkbox("Weryfikuj strony WWW", value=True)
     min_score = st.slider("Min AI Score", 0, 99, 45)
     mo = st.slider("Maks opinii", 10, 500, 200)
     min_op = st.slider("Min opinii", 0, 100, 0)
@@ -222,20 +314,31 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### Tryb lokalizacji")
     tryb_lok = st.radio("Wybierz tryb", ["Konkretne miasto", "Gmina / Powiat", "Wojewodztwo", "Kod pocztowy"])
+    st.markdown("---")
+    if st.button("Wyloguj sie", use_container_width=True):
+        st.session_state.zalogowany = False
+        st.session_state.kod_info = None
+        st.session_state.historia = []
+        st.rerun()
     if st.session_state.historia:
         st.markdown("---")
         st.markdown("### Historia")
         for h in reversed(st.session_state.historia[-5:]):
             st.markdown("- **" + h["branza"] + "** / " + h["lok"] + " -> " + str(h["wyniki"]) + " (" + h["czas"] + ")")
 
+# ── HEADER ──
 c1h, c2h = st.columns([3,1])
 with c1h:
     st.markdown('<div class="app-title">AI Lead Gen <span class="accent">PRO</span></div><div class="app-sub">Automatyczny skaner B2B + B2C - Analiza problemow - Gotowe skrypty - Sekwencje follow-up</div>', unsafe_allow_html=True)
 with c2h:
-    badge = '<span class="prod-badge">v2.2 LIVE</span>' if TRYB_PROD else '<span class="dev-badge">v2.2 DEV</span>'
-    st.markdown('<div style="text-align:right;padding-top:.5rem">' + badge + '</div>', unsafe_allow_html=True)
+    st.markdown('<div style="text-align:right;padding-top:.5rem"><span style="background:#f0fdf4;color:#16a34a;border:1.5px solid #16a34a;border-radius:20px;padding:5px 16px;font-size:.72rem;font-weight:700">v2.3 LIVE</span></div>', unsafe_allow_html=True)
 
 st.markdown("<hr>", unsafe_allow_html=True)
+
+# ── OSTRZEZENIE O SKANACH ──
+if pozostalo <= 5:
+    st.markdown(f'<div class="warning-box">⚠️ Zostało Ci tylko <b>{pozostalo} skanów</b>. Odnów subskrypcję żeby kontynuować.</div>', unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
 
 mc1, mc2, _ = st.columns([1.3, 1.5, 3])
 with mc1:
@@ -270,24 +373,26 @@ if st.session_state.tryb_modulu == "B2B":
     st.markdown("<br>", unsafe_allow_html=True)
     _, bc, _ = st.columns([1,2,1])
     with bc:
-        go_b2b = st.button("URUCHOM MASOWY SKAN B2B", type="primary", use_container_width=True)
+        go_b2b = st.button("URUCHOM MASOWY SKAN B2B", type="primary", use_container_width=True, disabled=(pozostalo <= 0))
+
     if go_b2b:
         if not branza.strip(): st.error("Wpisz branze!"); st.stop()
-        if not sk_key: st.error("Brak klucza Serper API!"); st.stop()
+        if not SK: st.error("Brak klucza Serper API!"); st.stop()
+        if pozostalo <= 0: st.error("Brak skanow. Odnow subskrypcje!"); st.stop()
         bar = st.progress(0); msg = st.empty(); stats_box = st.empty()
         wszystkie = []; widziane = set()
         msg.info("Generuje zapytania...")
         bar.progress(5)
-        zapytania = generuj_zapytania_b2b(branza, lok, ak, tryb_skanu)
+        zapytania = generuj_zapytania_b2b(branza, lok, AK, tryb_skanu)
         for i, zap in enumerate(zapytania):
             bar.progress(int(10 + 35 * i / len(zapytania)))
             msg.info("Skanuje (" + str(i+1) + "/" + str(len(zapytania)) + "): " + zap)
             if "Google Maps" in zrodla:
-                for f in szukaj_maps(zap, sk_key, mf):
+                for f in szukaj_maps(zap, SK, mf):
                     k2 = f["nazwa"].lower().strip()
                     if k2 not in widziane: widziane.add(k2); wszystkie.append(f)
             if "Google Web" in zrodla:
-                for f in szukaj_web(zap, sk_key, mf):
+                for f in szukaj_web(zap, SK, mf):
                     k2 = f["nazwa"].lower().strip()
                     if k2 not in widziane: widziane.add(k2); wszystkie.append(f)
             stats_box.info("Zebrano " + str(len(wszystkie)) + " firm...")
@@ -302,10 +407,10 @@ if st.session_state.tryb_modulu == "B2B":
             if f["opinie"] < min_op: continue
             bar.progress(50 + int(40 * i / max(len(wszystkie),1)))
             msg.info("Analizuje (" + str(i+1) + "/" + str(len(wszystkie)) + "): " + f["nazwa"])
-            wer = weryfikuj_strone(f["www"]) if weryfikuj else {"dziala": True, "ssl": False, "ocena_www": 5, "problemy": [], "ma_rezerwacje": False, "ma_social": False}
+            wer = weryfikuj_strone(f["www"]) if weryfikuj_www else {"dziala": True, "ssl": False, "ocena_www": 5, "problemy": [], "ma_rezerwacje": False, "ma_social": False}
             score = oblicz_score(f, wer)
             if score < min_score: continue
-            ai = analiza_claude(f, branza, ak, wer, score)
+            ai = analiza_claude(f, branza, AK, wer, score)
             st_label = status_leada(score)
             rows.append({"Status": st_label, "Nazwa": f["nazwa"], "Telefon": f["telefon"], "WWW": f["www"], "Adres": f["adres"], "Opinie": f["opinie"], "Ocena Google": f["ocena"], "Ocena strony": wer["ocena_www"], "SSL": "TAK" if wer["ssl"] else "NIE", "Rezerwacja": "TAK" if wer["ma_rezerwacje"] else "NIE", "Problemy WWW": " | ".join(wer["problemy"]) if wer["problemy"] else "OK", "AI Score": score, "Szansa %": ai.get("szansa",50), "Problem": ai.get("problem",""), "SMS": ai.get("sms",""), "Call": ai.get("call",""), "Email temat": ai.get("email_temat",""), "Email tresc": ai.get("email_tresc",""), "Followup 1": ai.get("followup1",""), "Followup 2": ai.get("followup2","")})
         bar.progress(100); msg.empty(); stats_box.empty(); bar.empty()
@@ -315,6 +420,9 @@ if st.session_state.tryb_modulu == "B2B":
         elif sort == "Najmniej opinii": df = df.sort_values("Opinie", ascending=True)
         else: df = df.sort_values("Ocena strony", ascending=True)
         df = df.reset_index(drop=True)
+        # Aktualizuj licznik skanow w session state
+        st.session_state.kod_info["skany_wykorzystane"] += 1
+        st.session_state.kod_info["pozostalo"] -= 1
         st.session_state.historia.append({"branza": branza, "lok": lok, "wyniki": len(df), "czas": datetime.now().strftime("%H:%M")})
         hot = len(df[df["Status"]=="HOT"]); warm = len(df[df["Status"]=="WARM"])
         bez_www = len(df[df["WWW"].isin(["brak","sprawdz na stronie",""])]); sr_score = int(df["AI Score"].mean())
@@ -392,23 +500,25 @@ else:
     st.markdown("<br>", unsafe_allow_html=True)
     _, bbc, _ = st.columns([1,2,1])
     with bbc:
-        go_b2c = st.button("URUCHOM SKAN B2C - Znajdz moich klientow", type="primary", use_container_width=True)
+        go_b2c = st.button("URUCHOM SKAN B2C - Znajdz moich klientow", type="primary", use_container_width=True, disabled=(pozostalo <= 0))
     if go_b2c:
         if not produkt_b2c.strip() or not problem_b2c.strip(): st.error("Wpisz produkt i problem!"); st.stop()
-        if not sk_key: st.error("Brak klucza Serper API!"); st.stop()
+        if not SK: st.error("Brak klucza Serper API!"); st.stop()
         bar2 = st.progress(0); msg2 = st.empty()
         msg2.info("Claude analizuje gdzie sa Twoi klienci...")
         bar2.progress(10)
-        zapytania_b2c = generuj_b2c(produkt_b2c, problem_b2c, lok_b2c, ak)
+        zapytania_b2c = generuj_b2c(produkt_b2c, problem_b2c, lok_b2c, AK)
         wyniki_b2c = []; seen = set()
         for i, zap in enumerate(zapytania_b2c):
             bar2.progress(15 + int(35 * i / len(zapytania_b2c)))
             msg2.info("Szukam (" + str(i+1) + "/" + str(len(zapytania_b2c)) + "): " + zap)
-            for w in szukaj_b2c(zap, sk_key):
+            for w in szukaj_b2c(zap, SK):
                 if w["link"] not in seen: seen.add(w["link"]); wyniki_b2c.append(w)
         bar2.progress(65); msg2.info("Claude tworzy strategie...")
-        analiza = analiza_b2c(produkt_b2c, problem_b2c, wyniki_b2c, ak)
+        analiza = analiza_b2c(produkt_b2c, problem_b2c, wyniki_b2c, AK)
         bar2.progress(100); msg2.empty(); bar2.empty()
+        st.session_state.kod_info["skany_wykorzystane"] += 1
+        st.session_state.kod_info["pozostalo"] -= 1
         st.success("Analiza gotowa! Znaleziono " + str(len(wyniki_b2c)) + " zrodel.")
         st.markdown("<br>", unsafe_allow_html=True)
         rc1, rc2 = st.columns(2)
@@ -437,4 +547,4 @@ else:
                 st.download_button("Pobierz zrodla CSV", df_b2c.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig"), file_name="b2c_" + produkt_b2c + ".csv", mime="text/csv", use_container_width=True)
 
 st.markdown("<hr>", unsafe_allow_html=True)
-st.markdown('<div style="text-align:center;font-size:.72rem;color:#cbd5e1">AI Lead Gen PRO v2.2 - B2B + B2C - Powered by Claude AI + Serper.dev</div>', unsafe_allow_html=True)
+st.markdown('<div style="text-align:center;font-size:.72rem;color:#cbd5e1">AI Lead Gen PRO v2.3 - B2B + B2C - Powered by Claude AI + Serper.dev</div>', unsafe_allow_html=True)
