@@ -286,12 +286,22 @@ def oblicz_score(f, wer):
     if not wer["ma_rezerwacje"]: s += 5
     return min(s, 99)
 
+def oblicz_strate_finansowa(f, wer):
+    """Szacuje mozliwa miesieczna strate finansowa (PLN) wynikajaca z braku/slabej strony WWW."""
+    SREDNI_KOSZYK = 150  # PLN, szacunkowa wartosc jednej transakcji/klienta
+    if f["www"] in ["brak","sprawdz na stronie",""]:
+        utraceni_klienci = 25  # brak strony = duza utracona widocznosc
+    else:
+        utraceni_klienci = len(wer["problemy"]) * 5
+        if not wer["ma_rezerwacje"]: utraceni_klienci += 5
+    return utraceni_klienci * SREDNI_KOSZYK
+
 def status_leada(score):
     if score >= 80: return "HOT"
     elif score >= 60: return "WARM"
     else: return "COLD"
 
-def analiza_claude_b2b(f, branza, ak, wer, score):
+def analiza_claude_b2b(f, branza, ak, wer, score, strata=0):
     FALLBACK = {"problem": "Brak analizy AI", "sms": "Dzien dobry! Budujemy strony dla firm z branzy " + branza + ". Czy moge przedstawic oferte?", "call": "Dzien dobry, dzwonie w sprawie strony internetowej. Czy maja Panstwo chwile?", "email_temat": "Propozycja wspolpracy", "email_tresc": "Dzien dobry, chcielibysmy przedstawic oferte na strone WWW.", "followup1": "Czy mieli Panstwo okazje zapoznac sie z nasza oferta?", "followup2": "To ostatnia wiadomosc — czy moge pomoc?", "szansa": 50}
     if not ak: return FALLBACK
     try:
@@ -301,11 +311,12 @@ Branża: {branza}
 Ocena WWW: {wer["ocena_www"]}/10
 Liczba opinii: {f["opinie"]}
 Problemy strony: {prob_str}
+Szacowana utracona miesieczna sprzedaz przez te problemy: {strata} PLN
 
 Zwróć JSON z polami: problem, sms, call, email_temat, email_tresc, followup1, followup2, szansa"""
 
         tekst = claude_call(
-            'Jesteś ekspertem od cold outreach B2B. Odpowiadasz WYŁĄCZNIE czystym JSON bez żadnego tekstu przed ani po. Format: {"problem": "max 10 slow", "sms": "SMS do 160 znakow", "call": "3 zdania", "email_temat": "max 8 slow", "email_tresc": "5 zdan", "followup1": "2 zdania", "followup2": "2 zdania", "szansa": liczba_0_100}',
+            'Jesteś ekspertem od cold outreach B2B. Odpowiadasz WYŁĄCZNIE czystym JSON bez żadnego tekstu przed ani po. Format: {"problem": "max 10 slow", "sms": "SMS do 160 znakow", "call": "3 zdania", "email_temat": "max 8 slow", "email_tresc": "5 zdan", "followup1": "2 zdania", "followup2": "2 zdania", "szansa": liczba_0_100}. Jesli podana jest szacowana utracona sprzedaz (PLN/mc), WYKORZYSTAJ te konkretna liczbe jako mocny argument w SMS, call i email_tresc — to najsilniejszy hak w cold outreach.',
             user_prompt, ak, 500
         )
         wynik = safe_parse_json(tekst)
@@ -602,8 +613,9 @@ if st.session_state.tryb_modulu == "B2B":
             wer = weryfikuj_strone(f["www"]) if weryfikuj_www else {"dziala": True, "ssl": False, "ocena_www": 5, "problemy": [], "ma_rezerwacje": False, "ma_social": False}
             score = oblicz_score(f, wer)
             if score < min_score: continue
-            ai = analiza_claude_b2b(f, branza, AK, wer, score)
-            rows.append({"Status": status_leada(score), "Nazwa": f["nazwa"], "Telefon": f["telefon"], "WWW": f["www"], "Adres": f["adres"], "Opinie": f["opinie"], "Ocena Google": f["ocena"], "Ocena strony": wer["ocena_www"], "SSL": "TAK" if wer["ssl"] else "NIE", "Rezerwacja": "TAK" if wer["ma_rezerwacje"] else "NIE", "Problemy WWW": " | ".join(wer["problemy"]) if wer["problemy"] else "OK", "AI Score": score, "Szansa %": ai.get("szansa",50), "Problem": ai.get("problem",""), "SMS": ai.get("sms",""), "Call": ai.get("call",""), "Email temat": ai.get("email_temat",""), "Email tresc": ai.get("email_tresc",""), "Followup 1": ai.get("followup1",""), "Followup 2": ai.get("followup2","")})
+            strata = oblicz_strate_finansowa(f, wer)
+            ai = analiza_claude_b2b(f, branza, AK, wer, score, strata)
+            rows.append({"Status": status_leada(score), "Nazwa": f["nazwa"], "Telefon": f["telefon"], "WWW": f["www"], "Adres": f["adres"], "Opinie": f["opinie"], "Ocena Google": f["ocena"], "Ocena strony": wer["ocena_www"], "SSL": "TAK" if wer["ssl"] else "NIE", "Rezerwacja": "TAK" if wer["ma_rezerwacje"] else "NIE", "Problemy WWW": " | ".join(wer["problemy"]) if wer["problemy"] else "OK", "AI Score": score, "Strata/mc (PLN)": strata, "Szansa %": ai.get("szansa",50), "Problem": ai.get("problem",""), "SMS": ai.get("sms",""), "Call": ai.get("call",""), "Email temat": ai.get("email_temat",""), "Email tresc": ai.get("email_tresc",""), "Followup 1": ai.get("followup1",""), "Followup 2": ai.get("followup2","")})
         bar.progress(100); msg.empty(); stats_box.empty(); bar.empty()
         if not rows: st.warning("Brak wynikow. Zmien filtry."); st.stop()
         df = pd.DataFrame(rows)
@@ -627,7 +639,7 @@ if st.session_state.tryb_modulu == "B2B":
         st.markdown("<br>", unsafe_allow_html=True)
         tab1,tab2,tab3,tab4,tab5,tab6 = st.tabs(["Tabela wynikow","SMS / Cold Call","Sekwencja Email","TOP 5","Analiza","Eksport"])
         with tab1:
-            st.dataframe(df[["Status","Nazwa","Telefon","WWW","Opinie","Ocena Google","Ocena strony","SSL","Rezerwacja","AI Score","Szansa %","Problem","Problemy WWW"]], use_container_width=True, hide_index=True, column_config={"AI Score": st.column_config.ProgressColumn("AI Score", min_value=0, max_value=99, format="%d/99"), "Ocena strony": st.column_config.ProgressColumn("Ocena strony", min_value=0, max_value=10, format="%d/10"), "Szansa %": st.column_config.ProgressColumn("Szansa %", min_value=0, max_value=100, format="%d%%")})
+            st.dataframe(df[["Status","Nazwa","Telefon","WWW","Opinie","Ocena Google","Ocena strony","SSL","Rezerwacja","AI Score","Strata/mc (PLN)","Szansa %","Problem","Problemy WWW"]], use_container_width=True, hide_index=True, column_config={"AI Score": st.column_config.ProgressColumn("AI Score", min_value=0, max_value=99, format="%d/99"), "Ocena strony": st.column_config.ProgressColumn("Ocena strony", min_value=0, max_value=10, format="%d/10"), "Strata/mc (PLN)": st.column_config.NumberColumn("Strata/mc (PLN)", format="%d zl"), "Szansa %": st.column_config.ProgressColumn("Szansa %", min_value=0, max_value=100, format="%d%%")})
         with tab2:
             for _, row in df.head(25).iterrows():
                 with st.expander(row["Status"] + " | " + row["Nazwa"] + " — " + row["Telefon"] + " | Score: " + str(row["AI Score"]) + "/99"):
@@ -646,7 +658,7 @@ if st.session_state.tryb_modulu == "B2B":
             for _, row in top5.iterrows():
                 ta, tb, tc = st.columns([1,1,2])
                 with ta: st.markdown("**" + row["Nazwa"] + "**"); st.markdown("Tel: `" + row["Telefon"] + "`")
-                with tb: st.markdown("Score: **" + str(row["AI Score"]) + "/99**"); st.caption(row["Problem"])
+                with tb: st.markdown("Score: **" + str(row["AI Score"]) + "/99**"); st.caption(row["Problem"]); st.caption("💸 Strata: ~" + str(int(row["Strata/mc (PLN)"])) + " zl/mc")
                 with tc: st.info("SMS: " + row["SMS"])
                 st.markdown("<hr>", unsafe_allow_html=True)
         with tab5:
