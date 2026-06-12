@@ -36,10 +36,13 @@ div[data-testid="stDownloadButton"] > button { background: #f0fdf4 !important; c
 .insight-text { color: #475569; font-size: 0.85rem; line-height: 1.6; }
 .quote-card { background: #fafafa; border-left: 3px solid #7c3aed; border-radius: 0 8px 8px 0; padding: 0.8rem 1rem; margin-bottom: 0.6rem; font-style: italic; color: #374151; font-size: 0.85rem; }
 .competitor-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1rem 1.2rem; margin-bottom: 0.8rem; }
+.competitor-card-global { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.2rem 1.4rem; margin-bottom: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
 .ads-card { background: linear-gradient(135deg, #eff6ff 0%, #f5f3ff 100%); border: 1px solid #c7d2fe; border-radius: 12px; padding: 1.2rem 1.4rem; margin-bottom: 1rem; }
 .ads-headline { font-family: 'Space Grotesk', sans-serif; font-size: 1.1rem; font-weight: 700; color: #1e40af; margin-bottom: 0.5rem; }
 .place-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.8rem 1rem; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.8rem; }
 .place-type { background: #eff6ff; color: #2563eb; border-radius: 20px; padding: 2px 10px; font-size: 0.72rem; font-weight: 700; white-space: nowrap; }
+.better-tag { background: #f0fdf4; color: #16a34a; border-radius: 20px; padding: 2px 10px; font-size: 0.72rem; font-weight: 700; white-space: nowrap; border: 1px solid #bbf7d0; }
+.worse-tag { background: #fff7ed; color: #ea580c; border-radius: 20px; padding: 2px 10px; font-size: 0.72rem; font-weight: 700; white-space: nowrap; border: 1px solid #fed7aa; }
 .app-title { font-family: 'Space Grotesk', sans-serif; font-size: 2rem; font-weight: 700; color: #0f172a; letter-spacing: -0.02em; }
 .accent { color: #2563eb; }
 .app-sub { font-size: 0.88rem; color: #94a3b8; margin-top: 0.3rem; }
@@ -47,6 +50,7 @@ hr { border: none; border-top: 1px solid #e2e8f0; margin: 1.2rem 0; }
 .section-header { font-family: 'Space Grotesk', sans-serif; font-size: 1rem; font-weight: 700; color: #1e293b; margin-bottom: 1rem; }
 .login-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 20px; padding: 3rem 2.5rem; max-width: 460px; margin: 4rem auto; box-shadow: 0 4px 24px rgba(0,0,0,0.08); text-align: center; }
 .skany-bar { background: #f1f5f9; border-radius: 10px; padding: 0.7rem 1rem; font-size: 0.8rem; color: #475569; text-align: center; margin-top: 0.5rem; }
+.action-item { background: #f0fdf4; border: 1px solid #bbf7d0; border-left: 3px solid #16a34a; border-radius: 0 8px 8px 0; padding: 8px 12px; margin-bottom: 6px; font-size: .85rem; color: #14532d; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -123,13 +127,55 @@ if not st.session_state.zalogowany:
 info = st.session_state.kod_info
 pozostalo = info["pozostalo"]
 
+# ── HELPER: bezpieczny parser JSON ──
+def safe_parse_json(text):
+    """Wyciąga JSON z tekstu nawet jeśli Claude dodał komentarz przed/po."""
+    text = text.strip()
+    # Szukaj pierwszego { i ostatniego }
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        return None
+    candidate = text[start:end+1]
+    try:
+        return json.loads(candidate)
+    except:
+        # Próba naprawy — usuń znaki kontrolne
+        import re
+        candidate_clean = re.sub(r'[\x00-\x1f\x7f]', ' ', candidate)
+        try:
+            return json.loads(candidate_clean)
+        except:
+            return None
+
+# ── HELPER: wywołanie Claude z systemowym promptem ──
+def claude_call(system_prompt, user_prompt, ak, max_tokens=800):
+    """Wywołuje Claude API z system promptem wymuszającym czysty JSON."""
+    r = requests.post(
+        "https://api.anthropic.com/v1/messages",
+        headers={"x-api-key": ak, "anthropic-version": "2023-06-01", "content-type": "application/json"},
+        json={
+            "model": "claude-haiku-4-5",
+            "max_tokens": max_tokens,
+            "system": system_prompt,
+            "messages": [{"role": "user", "content": user_prompt}]
+        },
+        timeout=30
+    )
+    r.raise_for_status()
+    return r.json()["content"][0]["text"]
+
 # ── FUNKCJE B2B ──
 def generuj_zapytania_b2b(branza, lok, ak, tryb):
     if tryb == "Szybki (1 zapytanie)": return [branza + " " + lok]
     elif tryb == "Sredni (3 zapytania)": return [branza + " " + lok, "uslugi " + branza + " " + lok, branza + " " + lok + " tani"]
+    if not ak: return [branza + " " + lok, "uslugi " + branza + " " + lok]
     try:
-        r = requests.post("https://api.anthropic.com/v1/messages", headers={"x-api-key": ak, "anthropic-version": "2023-06-01", "content-type": "application/json"}, json={"model": "claude-haiku-4-5", "max_tokens": 250, "messages": [{"role": "user", "content": "Wygeneruj 6 roznych zapytan Google Maps dla branzy: " + branza + " w lokalizacji: " + lok + ". TYLKO zapytania oddzielone srednikiem."}]}, timeout=15)
-        tekst = r.json()["content"][0]["text"]
+        tekst = claude_call(
+            "Odpowiadasz TYLKO listą zapytań oddzielonych średnikiem. Bez żadnego innego tekstu.",
+            f"Wygeneruj 6 różnych zapytań Google Maps dla branży: {branza} w lokalizacji: {lok}. TYLKO zapytania oddzielone średnikiem.",
+            ak, 200
+        )
         return [z.strip() for z in tekst.split(";") if z.strip()][:6]
     except:
         return [branza + " " + lok, "uslugi " + branza + " " + lok]
@@ -186,16 +232,33 @@ def status_leada(score):
     else: return "COLD"
 
 def analiza_claude_b2b(f, branza, ak, wer, score):
-    if not ak: return {"problem": "Brak API", "sms": "Dzien dobry!", "call": "Dzien dobry!", "email_temat": "Wspolpraca", "email_tresc": "Dzien dobry", "followup1": "Followup", "followup2": "Ostatni", "szansa": 40}
+    FALLBACK = {"problem": "Brak analizy AI", "sms": "Dzien dobry! Budujemy strony dla firm z branzy " + branza + ". Czy moge przedstawic oferte?", "call": "Dzien dobry, dzwonie w sprawie strony internetowej. Czy maja Panstwo chwile?", "email_temat": "Propozycja wspolpracy", "email_tresc": "Dzien dobry, chcielibysmy przedstawic oferte na strone WWW.", "followup1": "Czy mieli Panstwo okazje zapoznac sie z nasza oferta?", "followup2": "To ostatnia wiadomosc — czy moge pomoc?", "szansa": 50}
+    if not ak: return FALLBACK
     try:
-        prob_str = ", ".join(wer["problemy"]) if wer["problemy"] else "brak"
-        prompt = "Firma: " + f["nazwa"] + ", branza: " + branza + ", WWW ocena: " + str(wer["ocena_www"]) + "/10, opinie: " + str(f["opinie"]) + ", problemy: " + prob_str + ". JSON: {\"problem\": \"max 10 slow\", \"sms\": \"SMS 160 znakow\", \"call\": \"3 zdania\", \"email_temat\": \"max 8 slow\", \"email_tresc\": \"5 zdan\", \"followup1\": \"2 zdania\", \"followup2\": \"2 zdania\", \"szansa\": liczba}"
-        r = requests.post("https://api.anthropic.com/v1/messages", headers={"x-api-key": ak, "anthropic-version": "2023-06-01", "content-type": "application/json"}, json={"model": "claude-haiku-4-5", "max_tokens": 600, "messages": [{"role": "user", "content": prompt}]}, timeout=20)
-        t = r.json()["content"][0]["text"]
-        return json.loads(t[t.find("{"):t.rfind("}")+1])
-    except: return {"problem": "Blad", "sms": "Dzien dobry!", "call": "Dzien dobry!", "email_temat": "Wspolpraca", "email_tresc": "Dzien dobry", "followup1": "Followup", "followup2": "Ostatni", "szansa": 40}
+        prob_str = ", ".join(wer["problemy"]) if wer["problemy"] else "brak problemow"
+        user_prompt = f"""Firma: {f["nazwa"]}
+Branża: {branza}
+Ocena WWW: {wer["ocena_www"]}/10
+Liczba opinii: {f["opinie"]}
+Problemy strony: {prob_str}
 
-# ── FUNKCJE B2C NOWE ──
+Zwróć JSON z polami: problem, sms, call, email_temat, email_tresc, followup1, followup2, szansa"""
+
+        tekst = claude_call(
+            'Jesteś ekspertem od cold outreach B2B. Odpowiadasz WYŁĄCZNIE czystym JSON bez żadnego tekstu przed ani po. Format: {"problem": "max 10 slow", "sms": "SMS do 160 znakow", "call": "3 zdania", "email_temat": "max 8 slow", "email_tresc": "5 zdan", "followup1": "2 zdania", "followup2": "2 zdania", "szansa": liczba_0_100}',
+            user_prompt, ak, 500
+        )
+        wynik = safe_parse_json(tekst)
+        if wynik is None: return FALLBACK
+        # Uzupełnij brakujące klucze fallbackiem
+        for k, v in FALLBACK.items():
+            if k not in wynik or not wynik[k]:
+                wynik[k] = v
+        return wynik
+    except:
+        return FALLBACK
+
+# ── FUNKCJE B2C ──
 def serper_search(query, sk, num=10):
     try:
         r = requests.post("https://google.serper.dev/search", headers={"X-API-KEY": sk, "Content-Type": "application/json"}, json={"q": query, "gl": "pl", "hl": "pl", "num": num}, timeout=12)
@@ -203,7 +266,7 @@ def serper_search(query, sk, num=10):
     except: return {}
 
 def zbierz_dane_b2c(produkt, problem, lok, sk, msg_placeholder):
-    dane = {"popyt": [], "glos_klienta": [], "konkurencja": [], "miejsca": [], "raw_snippets": []}
+    dane = {"popyt": [], "glos_klienta": [], "konkurencja_globalna": [], "raw_snippets": []}
 
     msg_placeholder.info("🔍 Analizuję popyt rynkowy...")
     for q in [produkt + " polska", problem + " jak rozwiazac", produkt + " opinie", produkt + " gdzie kupic", problem + " forum"]:
@@ -215,131 +278,133 @@ def zbierz_dane_b2c(produkt, problem, lok, sk, msg_placeholder):
                 dane["popyt"].append(rs.get("query",""))
 
     msg_placeholder.info("💬 Zbieram głos klienta z forów i recenzji...")
-    for q in [produkt + " opinie forum", problem + " site:wizaz.pl OR site:kafeteria.pl OR site:forum.gazeta.pl", "\"" + problem + "\" co pomaga", produkt + " allegro opinie", problem + " reddit polska"]:
+    for q in [produkt + " opinie forum", problem + " site:wizaz.pl OR site:kafeteria.pl OR site:forum.gazeta.pl", '"' + problem + '" co pomaga', produkt + " allegro opinie"]:
         wynik = serper_search(q, sk, 5)
         for item in wynik.get("organic", []):
             if any(x in item.get("link","").lower() for x in ["forum","opinie","allegro","olx","ceneo","reddit","wizaz","kafeteria"]):
                 dane["glos_klienta"].append({"zrodlo": item.get("title",""), "cytat": item.get("snippet",""), "link": item.get("link","")})
             dane["raw_snippets"].append({"zrodlo": item.get("title",""), "tresc": item.get("snippet",""), "link": item.get("link",""), "query": q})
 
-    msg_placeholder.info("🏪 Mapuję konkurencję...")
-    for q in [produkt + " kup online polska", produkt + " sklep internetowy", produkt + " allegro", "najlepszy " + produkt + " ranking"]:
+    msg_placeholder.info("🌍 Szukam globalnych konkurentów sprzedających ten produkt...")
+    # Szukamy sklepów na całym świecie sprzedających ten sam produkt
+    for q in [
+        produkt + " buy online shop",
+        produkt + " shopify store",
+        produkt + " best seller amazon",
+        produkt + " ecommerce site:shopify.com OR site:amazon.com OR site:etsy.com",
+        "buy " + produkt + " site:.com",
+        produkt + " reviews trustpilot",
+        produkt + " sklep online najlepszy",
+        produkt + " aliexpress OR amazon",
+    ]:
         wynik = serper_search(q, sk, 5)
         for item in wynik.get("organic", []):
             link = item.get("link","").lower()
-            if any(x in link for x in ["allegro","ceneo","olx","sklep","shop","store"]) or ".pl" in link:
-                dane["konkurencja"].append({"nazwa": item.get("title",""), "link": item.get("link",""), "opis": item.get("snippet","")})
-            dane["raw_snippets"].append({"zrodlo": item.get("title",""), "tresc": item.get("snippet",""), "link": item.get("link",""), "query": q})
-
-    msg_placeholder.info("📍 Szukam miejsc gdzie siedzą Twoi klienci...")
-    for q in ["facebook groups " + problem, "facebook group " + produkt + " polska", problem + " instagram", problem + " youtube polska", produkt + " influencer polska", "forum " + problem, problem + " tiktok", produkt + " blog"]:
-        wynik = serper_search(q, sk, 5)
-        for item in wynik.get("organic", []):
-            link = item.get("link","").lower()
-            if "facebook.com/groups" in link: typ = "Grupa FB"
-            elif "facebook.com" in link: typ = "Facebook"
-            elif "instagram.com" in link: typ = "Instagram"
-            elif "youtube.com" in link: typ = "YouTube"
-            elif "tiktok.com" in link: typ = "TikTok"
+            # Kategoryzuj typ sklepu
+            if "shopify.com" in link or "myshopify" in link: typ = "Shopify"
+            elif "amazon" in link: typ = "Amazon"
+            elif "etsy" in link: typ = "Etsy"
+            elif "aliexpress" in link: typ = "AliExpress"
+            elif "ebay" in link: typ = "eBay"
             elif "allegro" in link: typ = "Allegro"
-            elif "olx.pl" in link: typ = "OLX"
-            elif "forum" in link or "kafeteria" in link or "wizaz" in link: typ = "Forum"
-            elif "blog" in link: typ = "Blog"
+            elif "ceneo" in link or "opineo" in link or "trustpilot" in link: typ = "Recenzje"
+            elif any(x in link for x in ["sklep","shop","store","buy","kup"]): typ = "Sklep online"
             else: typ = "Strona WWW"
-            dane["miejsca"].append({"typ": typ, "nazwa": item.get("title",""), "opis": item.get("snippet","")[:150], "link": item.get("link","")})
+            dane["konkurencja_globalna"].append({
+                "typ": typ,
+                "nazwa": item.get("title","")[:80],
+                "opis": item.get("snippet","")[:200],
+                "link": item.get("link","")
+            })
             dane["raw_snippets"].append({"zrodlo": item.get("title",""), "tresc": item.get("snippet",""), "link": item.get("link",""), "query": q})
 
     return dane
 
 def analiza_ai_b2c(produkt, problem, lok, grupa, dane, ak):
-    if not ak:
-        return {
-            "mapa_popytu": {"wielkosc": "Brak danych", "sezonowosc": "Brak danych", "slowa_kluczowe": ["brak"], "insight": "Dodaj klucz API"},
-            "glos_klienta": {"glowny_bol": "Brak danych", "obawy": ["brak"], "motywatory": ["brak"], "cytaty": ["Dodaj klucz API zeby zobaczyc prawdziwe cytaty"]},
-            "mapa_konkurencji": {"gracze": ["brak"], "slabe_strony": "brak", "luka_rynkowa": "Dodaj klucz API"},
-            "strategia": {"kanal_1": "Meta Ads", "kanal_2": "Grupy FB", "kanal_3": "TikTok", "uzasadnienie": "Dodaj klucz API"},
-            "meta_ads": [{"headline": "Przykladowy naglowek", "primary": "Przykladowy tekst reklamy", "cta": "Kup teraz"}]
-        }
+    FALLBACK = {
+        "mapa_popytu": {"wielkosc": "Brak danych — dodaj klucz Anthropic API", "sezonowosc": "Brak danych", "slowa_kluczowe": ["brak"], "insight": "Dodaj klucz API w secrets"},
+        "glos_klienta": {"glowny_bol": "Brak danych", "obawy": ["Dodaj klucz API"], "motywatory": ["Dodaj klucz API"], "cytaty": ["Dodaj klucz Anthropic API zeby zobaczyc analize"]},
+        "mapa_konkurencji": {"gracze": ["Brak danych"], "slabe_strony": "Dodaj klucz API", "luka_rynkowa": "Dodaj klucz API"},
+        "analiza_globalna": {"co_robia_dobrze": ["Brak danych"], "co_robia_zle": ["Brak danych"], "luka": "Brak danych", "jak_wygrac": ["Brak danych"]},
+        "strategia": {"kanal_1": "Meta Ads", "kanal_1_opis": "Dodaj klucz API", "kanal_2": "Grupy FB", "kanal_2_opis": "Dodaj klucz API", "kanal_3": "TikTok", "kanal_3_opis": "Dodaj klucz API", "budzet_start": "Dodaj klucz API"},
+        "meta_ads": [{"wariant": "Wariant 1", "headline": "Przykladowy naglowek", "primary": "Przykladowy tekst reklamy. Dodaj klucz Anthropic API.", "cta": "Kup teraz"}]
+    }
+    if not ak: return FALLBACK
+
     try:
-        snippets_str = "\n".join([f"- [{s['zrodlo']}]: {s['tresc']}" for s in dane["raw_snippets"][:30]])
-        miejsca_str = "\n".join([f"- {m['typ']}: {m['nazwa']}" for m in dane["miejsca"][:20]])
-        konkurencja_str = "\n".join([f"- {k['nazwa']}: {k['opis']}" for k in dane["konkurencja"][:10]])
-        prompt = f"""Jestes ekspertem od marketingu cyfrowego w Polsce. Przeanalizuj dane i zwroc JSON.
+        # Ogranicz dane do rozsądnej ilości żeby nie przekroczyć limitu tokenów
+        snippets_str = "\n".join([f"- [{s['zrodlo'][:40]}]: {s['tresc'][:100]}" for s in dane["raw_snippets"][:25]])
+        konkurencja_str = "\n".join([f"- [{k['typ']}] {k['nazwa'][:50]}: {k['opis'][:100]}" for k in dane["konkurencja_globalna"][:15]])
 
-PRODUKT: {produkt}
+        user_prompt = f"""PRODUKT: {produkt}
 PROBLEM KLIENTA: {problem}
-LOKALIZACJA: {lok}
-GRUPA DOCELOWA: {grupa}
+RYNEK: {lok}
+GRUPA: {grupa}
 
-DANE Z INTERNETU:
+DANE Z INTERNETU (skrócone):
 {snippets_str}
 
-ZNALEZIONE MIEJSCA:
-{miejsca_str}
+GLOBALNA KONKURENCJA ZNALEZIONA:
+{konkurencja_str}"""
 
-KONKURENCJA:
-{konkurencja_str}
+        system_prompt = """Jesteś ekspertem od marketingu cyfrowego. Odpowiadasz WYŁĄCZNIE czystym JSON — zero tekstu przed ani po, zero komentarzy, zero markdown.
 
-Zwroc TYLKO JSON bez zadnego tekstu przed ani po:
-{{
-  "mapa_popytu": {{
-    "wielkosc": "ocena wielkosci rynku w Polsce (np. Duzy - setki tysiecy szukajacych miesiecznie)",
-    "sezonowosc": "czy produkt jest sezonowy i kiedy szczyt",
-    "slowa_kluczowe": ["5 najwazniejszych slow kluczowych po polsku"],
-    "insight": "1 kluczowy insight o popycie oparty na danych"
-  }},
-  "glos_klienta": {{
-    "glowny_bol": "Glowny problem klienta opisany jego slowami (max 2 zdania)",
-    "obawy": ["3 glowne obawy przed zakupem"],
-    "motywatory": ["3 glowne powody zakupu"],
-    "cytaty": ["3 przykladowe cytaty z internetu pokazujace bol klienta - musza byc realistyczne"]
-  }},
-  "mapa_konkurencji": {{
-    "gracze": ["3-5 glownych graczy na rynku"],
-    "slabe_strony": "Co robi konkurencja zle - gdzie jest luka",
-    "luka_rynkowa": "Konkretna luka ktora mozna wykorzystac"
-  }},
-  "strategia": {{
-    "kanal_1": "Nazwa kanalu",
-    "kanal_1_opis": "Dlaczego ten kanal i jak go uzyc",
-    "kanal_2": "Nazwa kanalu",
-    "kanal_2_opis": "Dlaczego ten kanal i jak go uzyc",
-    "kanal_3": "Nazwa kanalu",
-    "kanal_3_opis": "Dlaczego ten kanal i jak go uzyc",
-    "budzet_start": "Rekomendowany budzet startowy"
-  }},
+Struktura JSON którą musisz zwrócić:
+{
+  "mapa_popytu": {
+    "wielkosc": "string",
+    "sezonowosc": "string",
+    "slowa_kluczowe": ["string", "string", "string", "string", "string"],
+    "insight": "string"
+  },
+  "glos_klienta": {
+    "glowny_bol": "string",
+    "obawy": ["string", "string", "string"],
+    "motywatory": ["string", "string", "string"],
+    "cytaty": ["string", "string", "string"]
+  },
+  "mapa_konkurencji": {
+    "gracze": ["string", "string", "string"],
+    "slabe_strony": "string",
+    "luka_rynkowa": "string"
+  },
+  "analiza_globalna": {
+    "co_robia_dobrze": ["string", "string", "string"],
+    "co_robia_zle": ["string", "string", "string"],
+    "luka": "string",
+    "jak_wygrac": ["string", "string", "string", "string", "string"]
+  },
+  "strategia": {
+    "kanal_1": "string",
+    "kanal_1_opis": "string",
+    "kanal_2": "string",
+    "kanal_2_opis": "string",
+    "kanal_3": "string",
+    "kanal_3_opis": "string",
+    "budzet_start": "string"
+  },
   "meta_ads": [
-    {{
-      "wariant": "Wariant 1 - Bol",
-      "headline": "Naglowek reklamy max 40 znakow",
-      "primary": "Tekst glowny reklamy 2-3 zdania skupione na bolu klienta",
-      "cta": "Tresc przycisku CTA"
-    }},
-    {{
-      "wariant": "Wariant 2 - Rozwiazanie",
-      "headline": "Naglowek reklamy max 40 znakow",
-      "primary": "Tekst glowny reklamy 2-3 zdania skupione na rozwiazaniu",
-      "cta": "Tresc przycisku CTA"
-    }},
-    {{
-      "wariant": "Wariant 3 - Dowod spoleczny",
-      "headline": "Naglowek reklamy max 40 znakow",
-      "primary": "Tekst glowny reklamy 2-3 zdania z dowodem spolecznym",
-      "cta": "Tresc przycisku CTA"
-    }}
+    {"wariant": "Wariant 1 - Bol", "headline": "max 40 znakow", "primary": "2-3 zdania", "cta": "string"},
+    {"wariant": "Wariant 2 - Rozwiazanie", "headline": "max 40 znakow", "primary": "2-3 zdania", "cta": "string"},
+    {"wariant": "Wariant 3 - Dowod spoleczny", "headline": "max 40 znakow", "primary": "2-3 zdania", "cta": "string"}
   ]
-}}"""
-        r = requests.post("https://api.anthropic.com/v1/messages", headers={"x-api-key": ak, "anthropic-version": "2023-06-01", "content-type": "application/json"}, json={"model": "claude-haiku-4-5", "max_tokens": 2000, "messages": [{"role": "user", "content": prompt}]}, timeout=40)
-        t = r.json()["content"][0]["text"]
-        return json.loads(t[t.find("{"):t.rfind("}")+1])
+}"""
+
+        tekst = claude_call(system_prompt, user_prompt, ak, 2000)
+        wynik = safe_parse_json(tekst)
+        if wynik is None:
+            FALLBACK["mapa_popytu"]["insight"] = "Blad parsowania JSON. Sprobuj ponownie."
+            return FALLBACK
+
+        # Uzupełnij brakujące klucze fallbackiem
+        for k, v in FALLBACK.items():
+            if k not in wynik:
+                wynik[k] = v
+
+        return wynik
     except Exception as e:
-        return {
-            "mapa_popytu": {"wielkosc": "Blad analizy", "sezonowosc": "Blad", "slowa_kluczowe": ["blad"], "insight": str(e)},
-            "glos_klienta": {"glowny_bol": "Blad", "obawy": ["blad"], "motywatory": ["blad"], "cytaty": ["blad"]},
-            "mapa_konkurencji": {"gracze": ["blad"], "slabe_strony": "blad", "luka_rynkowa": "blad"},
-            "strategia": {"kanal_1": "blad", "kanal_1_opis": "blad", "kanal_2": "blad", "kanal_2_opis": "blad", "kanal_3": "blad", "kanal_3_opis": "blad", "budzet_start": "blad"},
-            "meta_ads": [{"wariant": "blad", "headline": "blad", "primary": "blad", "cta": "blad"}]
-        }
+        FALLBACK["mapa_popytu"]["insight"] = f"Blad API: {str(e)[:100]}"
+        return FALLBACK
 
 # ── SIDEBAR ──
 with st.sidebar:
@@ -381,7 +446,7 @@ c1h, c2h = st.columns([3,1])
 with c1h:
     st.markdown('<div class="app-title">AI Lead Gen <span class="accent">PRO</span></div><div class="app-sub">Automatyczny skaner B2B + B2C Intelligence — Analiza rynku, Głos klienta, Mapa konkurencji, Gotowe reklamy</div>', unsafe_allow_html=True)
 with c2h:
-    st.markdown('<div style="text-align:right;padding-top:.5rem"><span style="background:#f0fdf4;color:#16a34a;border:1.5px solid #16a34a;border-radius:20px;padding:5px 16px;font-size:.72rem;font-weight:700">v3.0 LIVE</span></div>', unsafe_allow_html=True)
+    st.markdown('<div style="text-align:right;padding-top:.5rem"><span style="background:#f0fdf4;color:#16a34a;border:1.5px solid #16a34a;border-radius:20px;padding:5px 16px;font-size:.72rem;font-weight:700">v3.1 LIVE</span></div>', unsafe_allow_html=True)
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
@@ -517,11 +582,11 @@ if st.session_state.tryb_modulu == "B2B":
                 st.download_button("Pobierz HOT + WARM", df_hw.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig"), file_name="HOT_WARM_" + branza + ".csv", mime="text/csv", use_container_width=True)
 
 # ══════════════════════════════════════════
-# MODUL B2C — NOWY INTELLIGENCE
+# MODUL B2C
 # ══════════════════════════════════════════
 else:
     st.markdown('<div class="section-header">B2C Intelligence — Pelna analiza rynku dla Twojego produktu</div>', unsafe_allow_html=True)
-    st.markdown('<div class="info-box">🧠 Skanuję Google, Allegro, fora, grupy FB i recenzje żeby dać Ci pełny obraz rynku — kim jest Twój klient, gdzie siedzi i jak do niego dotrzeć.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="info-box">🧠 Skanuję Google, Allegro, fora i recenzje żeby dać Ci pełny obraz rynku — kim jest Twój klient, gdzie siedzi, jak do niego dotrzeć i jak pokonać globalną konkurencję.</div>', unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
 
     bc1, bc2 = st.columns(2)
@@ -535,7 +600,7 @@ else:
     st.markdown("<br>", unsafe_allow_html=True)
     _, bbc, _ = st.columns([1,2,1])
     with bbc:
-        go_b2c = st.button("🔍 URUCHOM PELNA ANALIZE RYNKU B2C", type="primary", use_container_width=True, disabled=(pozostalo <= 0))
+        go_b2c = st.button("URUCHOM PELNA ANALIZE RYNKU B2C", type="primary", use_container_width=True, disabled=(pozostalo <= 0))
 
     if go_b2c:
         if not produkt_b2c.strip() or not problem_b2c.strip(): st.error("Wpisz produkt i problem!"); st.stop()
@@ -544,13 +609,13 @@ else:
         bar_b2c = st.progress(0)
         msg_b2c = st.empty()
 
-        msg_b2c.info("🚀 Uruchamiam pelna analize rynku — to moze zajac 30-60 sekund...")
+        msg_b2c.info("Uruchamiam pelna analize rynku — moze zajac 30-60 sekund...")
         bar_b2c.progress(5)
 
         dane = zbierz_dane_b2c(produkt_b2c, problem_b2c, lok_b2c, SK, msg_b2c)
         bar_b2c.progress(70)
 
-        msg_b2c.info("🧠 Claude AI syntetyzuje dane i tworzy strategie...")
+        msg_b2c.info("Claude AI syntetyzuje dane i tworzy strategie...")
         wyniki_ai = analiza_ai_b2c(produkt_b2c, problem_b2c, lok_b2c, grupa_b2c, dane, AK)
         bar_b2c.progress(95)
 
@@ -558,106 +623,152 @@ else:
         st.session_state.kod_info["pozostalo"] -= 1
         bar_b2c.progress(100); msg_b2c.empty(); bar_b2c.empty()
 
-        st.success(f"✅ Analiza gotowa! Zebrano dane z {len(dane['raw_snippets'])} zrodel internetowych.")
+        st.success(f"Analiza gotowa! Zebrano dane z {len(dane['raw_snippets'])} zrodel.")
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # ── 5 ZAKŁADEK ──
-        t1, t2, t3, t4, t5 = st.tabs(["📊 Mapa Popytu", "💬 Glos Klienta", "🏪 Mapa Konkurencji", "📍 50 Miejsc", "🎯 Strategia + Meta Ads"])
+        # ── 5 ZAKŁADEK — nowa struktura ──
+        t1, t2, t3, t4, t5 = st.tabs([
+            "📊 Mapa Popytu",
+            "💬 Glos Klienta",
+            "🏪 Mapa Konkurencji",
+            "🌍 Analiza Konkurencji Globalnej",
+            "🎯 Strategia + Meta Ads"
+        ])
 
-        # ── ZAKŁADKA 1: MAPA POPYTU ──
+        # ── TAB 1: MAPA POPYTU ──
         with t1:
             st.markdown("### 📊 Mapa Popytu Rynkowego")
             mp = wyniki_ai.get("mapa_popytu", {})
             col_a, col_b = st.columns(2)
             with col_a:
-                st.markdown('<div class="insight-card"><div class="insight-title">📈 Wielkosc rynku</div><div class="insight-text">' + str(mp.get("wielkosc","brak")) + '</div></div>', unsafe_allow_html=True)
-                st.markdown('<div class="insight-card"><div class="insight-title">📅 Sezonowosc</div><div class="insight-text">' + str(mp.get("sezonowosc","brak")) + '</div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="insight-card"><div class="insight-title">📈 Wielkosc rynku</div><div class="insight-text">{mp.get("wielkosc","brak")}</div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="insight-card"><div class="insight-title">📅 Sezonowosc</div><div class="insight-text">{mp.get("sezonowosc","brak")}</div></div>', unsafe_allow_html=True)
             with col_b:
-                st.markdown('<div class="insight-card"><div class="insight-title">💡 Kluczowy insight</div><div class="insight-text">' + str(mp.get("insight","brak")) + '</div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="insight-card"><div class="insight-title">💡 Kluczowy insight</div><div class="insight-text">{mp.get("insight","brak")}</div></div>', unsafe_allow_html=True)
                 slowa = mp.get("slowa_kluczowe", [])
                 if slowa:
-                    st.markdown('<div class="insight-card"><div class="insight-title">🔑 Top slowa kluczowe</div><div class="insight-text">' + " • ".join([str(s) for s in slowa]) + '</div></div>', unsafe_allow_html=True)
-
+                    slowa_html = " • ".join([str(s) for s in slowa if s])
+                    st.markdown(f'<div class="insight-card"><div class="insight-title">🔑 Top slowa kluczowe</div><div class="insight-text">{slowa_html}</div></div>', unsafe_allow_html=True)
             if dane["popyt"]:
                 st.markdown("#### 🔍 Powiazane zapytania z Google")
                 cols = st.columns(3)
                 for i, q in enumerate(dane["popyt"][:9]):
-                    with cols[i % 3]: st.markdown(f'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:.85rem;color:#374151">🔎 {q}</div>', unsafe_allow_html=True)
+                    with cols[i % 3]:
+                        st.markdown(f'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:.85rem;color:#374151">🔎 {q}</div>', unsafe_allow_html=True)
 
-        # ── ZAKŁADKA 2: GŁOS KLIENTA ──
+        # ── TAB 2: GŁOS KLIENTA ──
         with t2:
             st.markdown("### 💬 Głos Klienta — Co naprawdę mówią o tym problemie")
             gk = wyniki_ai.get("glos_klienta", {})
-
             col_a, col_b = st.columns(2)
             with col_a:
-                st.markdown('<div class="insight-card"><div class="insight-title">😤 Glowny bol klienta</div><div class="insight-text">' + str(gk.get("glowny_bol","brak")) + '</div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="insight-card"><div class="insight-title">😤 Glowny bol klienta</div><div class="insight-text">{gk.get("glowny_bol","brak")}</div></div>', unsafe_allow_html=True)
                 st.markdown("**😰 Obawy przed zakupem:**")
                 for ob in gk.get("obawy", []):
-                    st.markdown(f'<div style="background:#fff7ed;border-left:3px solid #ea580c;border-radius:0 8px 8px 0;padding:8px 12px;margin-bottom:6px;font-size:.85rem">⚠️ {ob}</div>', unsafe_allow_html=True)
+                    if ob: st.markdown(f'<div style="background:#fff7ed;border-left:3px solid #ea580c;border-radius:0 8px 8px 0;padding:8px 12px;margin-bottom:6px;font-size:.85rem">⚠️ {ob}</div>', unsafe_allow_html=True)
             with col_b:
                 st.markdown("**✅ Co motywuje do zakupu:**")
                 for mot in gk.get("motywatory", []):
-                    st.markdown(f'<div style="background:#f0fdf4;border-left:3px solid #16a34a;border-radius:0 8px 8px 0;padding:8px 12px;margin-bottom:6px;font-size:.85rem">💪 {mot}</div>', unsafe_allow_html=True)
-
+                    if mot: st.markdown(f'<div style="background:#f0fdf4;border-left:3px solid #16a34a;border-radius:0 8px 8px 0;padding:8px 12px;margin-bottom:6px;font-size:.85rem">💪 {mot}</div>', unsafe_allow_html=True)
             st.markdown("#### 📝 Cytaty z internetu — Prawdziwy głos klienta")
             for cytat in gk.get("cytaty", []):
-                st.markdown(f'<div class="quote-card">"{cytat}"</div>', unsafe_allow_html=True)
-
+                if cytat: st.markdown(f'<div class="quote-card">"{cytat}"</div>', unsafe_allow_html=True)
             if dane["glos_klienta"]:
                 st.markdown("#### 🔗 Zrodla gdzie ludzie rozmawiaja o tym problemie")
                 for item in dane["glos_klienta"][:8]:
                     st.markdown(f'<div class="place-card"><span class="place-type">Forum/Recenzja</span><div><b style="font-size:.85rem">{item["zrodlo"][:60]}</b><br><span style="font-size:.8rem;color:#64748b">{item["cytat"][:120]}...</span></div></div>', unsafe_allow_html=True)
 
-        # ── ZAKŁADKA 3: MAPA KONKURENCJI ──
+        # ── TAB 3: MAPA KONKURENCJI ──
         with t3:
-            st.markdown("### 🏪 Mapa Konkurencji")
+            st.markdown("### 🏪 Mapa Konkurencji Lokalnej")
             mk = wyniki_ai.get("mapa_konkurencji", {})
-
             col_a, col_b = st.columns(2)
             with col_a:
-                st.markdown('<div class="insight-card"><div class="insight-title">🎯 Luka rynkowa do wykorzystania</div><div class="insight-text">' + str(mk.get("luka_rynkowa","brak")) + '</div></div>', unsafe_allow_html=True)
-                st.markdown('<div class="insight-card"><div class="insight-title">😤 Slabe strony konkurencji</div><div class="insight-text">' + str(mk.get("slabe_strony","brak")) + '</div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="insight-card"><div class="insight-title">🎯 Luka rynkowa do wykorzystania</div><div class="insight-text">{mk.get("luka_rynkowa","brak")}</div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="insight-card"><div class="insight-title">😤 Slabe strony konkurencji</div><div class="insight-text">{mk.get("slabe_strony","brak")}</div></div>', unsafe_allow_html=True)
             with col_b:
                 st.markdown("**🏆 Glowni gracze na rynku:**")
                 for gracz in mk.get("gracze", []):
-                    st.markdown(f'<div class="competitor-card"><b style="font-size:.85rem">🏪 {gracz}</b></div>', unsafe_allow_html=True)
+                    if gracz: st.markdown(f'<div class="competitor-card"><b style="font-size:.85rem">🏪 {gracz}</b></div>', unsafe_allow_html=True)
 
-            if dane["konkurencja"]:
-                st.markdown("#### 🔍 Znaleziona konkurencja online")
-                for item in dane["konkurencja"][:10]:
-                    st.markdown(f'<div class="competitor-card"><b style="font-size:.85rem">{item["nazwa"][:70]}</b><br><span style="font-size:.8rem;color:#64748b">{item["opis"][:120]}</span><br><a href="{item["link"]}" target="_blank" style="font-size:.75rem;color:#2563eb">{item["link"][:60]}</a></div>', unsafe_allow_html=True)
-
-        # ── ZAKŁADKA 4: 50 MIEJSC ──
+        # ── TAB 4: ANALIZA KONKURENCJI GLOBALNEJ (NOWA) ──
         with t4:
-            st.markdown("### 📍 Miejsca gdzie siedzą Twoi klienci")
-            st.markdown(f'<div class="success-box">Znaleziono <b>{len(dane["miejsca"])} miejsc</b> gdzie możesz dotrzeć do potencjalnych klientów.</div>', unsafe_allow_html=True)
+            st.markdown("### 🌍 Analiza Konkurencji Globalnej")
+            st.markdown('<div class="info-box">Przeanalizowałem sklepy i firmy sprzedające ten sam produkt na świecie (Shopify, Amazon, Allegro). Oto co robią dobrze, co robią źle i jak możesz ich pokonać.</div>', unsafe_allow_html=True)
             st.markdown("<br>", unsafe_allow_html=True)
 
-            typy = {}
-            for m in dane["miejsca"]:
-                typ = m["typ"]
-                if typ not in typy: typy[typ] = []
-                typy[typ].append(m)
+            ag = wyniki_ai.get("analiza_globalna", {})
 
-            ikony = {"Grupa FB": "👥", "Facebook": "📘", "Instagram": "📸", "YouTube": "🎥", "TikTok": "🎵", "Forum": "💬", "Allegro": "🛒", "OLX": "📦", "Blog": "📝", "Strona WWW": "🌐"}
+            # Wyniki AI — co robią dobrze vs źle
+            col_good, col_bad = st.columns(2)
+            with col_good:
+                st.markdown("#### ✅ Co robi konkurencja dobrze")
+                for item in ag.get("co_robia_dobrze", []):
+                    if item: st.markdown(f'<div style="background:#f0fdf4;border-left:3px solid #16a34a;border-radius:0 8px 8px 0;padding:8px 12px;margin-bottom:6px;font-size:.85rem;color:#14532d">✅ {item}</div>', unsafe_allow_html=True)
+            with col_bad:
+                st.markdown("#### ❌ Co robi konkurencja źle (Twoja szansa)")
+                for item in ag.get("co_robia_zle", []):
+                    if item: st.markdown(f'<div style="background:#fff7ed;border-left:3px solid #ea580c;border-radius:0 8px 8px 0;padding:8px 12px;margin-bottom:6px;font-size:.85rem;color:#9a3412">❌ {item}</div>', unsafe_allow_html=True)
 
-            for typ, items in sorted(typy.items(), key=lambda x: -len(x[1])):
-                ikona = ikony.get(typ, "📌")
-                st.markdown(f"#### {ikona} {typ} ({len(items)} miejsc)")
-                for item in items[:10]:
-                    st.markdown(f'<div class="place-card"><span class="place-type">{typ}</span><div style="flex:1"><b style="font-size:.85rem">{item["nazwa"][:70]}</b><br><span style="font-size:.78rem;color:#64748b">{item["opis"][:100]}</span></div><a href="{item["link"]}" target="_blank" style="font-size:.75rem;color:#2563eb;white-space:nowrap">Przejdz →</a></div>', unsafe_allow_html=True)
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # Luka rynkowa
+            luka = ag.get("luka", "")
+            if luka:
+                st.markdown(f'<div class="insight-card" style="border-left:3px solid #7c3aed"><div class="insight-title">🎯 Główna luka rynkowa którą możesz wypełnić</div><div class="insight-text" style="font-size:.95rem">{luka}</div></div>', unsafe_allow_html=True)
+
+            # Lista akcji "zrób to lepiej od nich"
+            jak_wygrac = ag.get("jak_wygrac", [])
+            if jak_wygrac:
+                st.markdown("#### 🏆 Lista akcji — Zrób to lepiej od globalnej konkurencji")
+                for i, akcja in enumerate(jak_wygrac, 1):
+                    if akcja: st.markdown(f'<div class="action-item">✅ <b>{i}.</b> {akcja}</div>', unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # Znalezione sklepy z linkami
+            if dane["konkurencja_globalna"]:
+                st.markdown("#### 🔗 Znalezieni globalni konkurenci — przejrzyj ich sklepy")
+                st.markdown(f'<div class="success-box">Znaleziono <b>{len(dane["konkurencja_globalna"])} stron</b> sprzedających podobny produkt. Kliknij linki żeby przejrzeć jak to robią.</div>', unsafe_allow_html=True)
                 st.markdown("<br>", unsafe_allow_html=True)
 
-            if dane["miejsca"]:
-                df_miejsca = pd.DataFrame(dane["miejsca"])
-                st.download_button("📥 Pobierz liste miejsc CSV", df_miejsca.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig"), file_name="miejsca_" + produkt_b2c + ".csv", mime="text/csv", use_container_width=False)
+                # Grupuj według typu
+                typy_glob = {}
+                for k in dane["konkurencja_globalna"]:
+                    t = k["typ"]
+                    if t not in typy_glob: typy_glob[t] = []
+                    typy_glob[t].append(k)
 
-        # ── ZAKŁADKA 5: STRATEGIA + META ADS ──
+                ikony_glob = {"Shopify": "🛍️", "Amazon": "📦", "Etsy": "🎨", "AliExpress": "🇨🇳", "eBay": "🔨", "Allegro": "🛒", "Recenzje": "⭐", "Sklep online": "🌐", "Strona WWW": "💻"}
+
+                for typ, items in sorted(typy_glob.items(), key=lambda x: -len(x[1])):
+                    ikona = ikony_glob.get(typ, "🌐")
+                    st.markdown(f"**{ikona} {typ} ({len(items)} znalezionych)**")
+                    for item in items[:6]:
+                        st.markdown(f'''<div class="competitor-card-global">
+                            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem">
+                                <div style="flex:1">
+                                    <b style="font-size:.88rem;color:#0f172a">{item["nazwa"]}</b><br>
+                                    <span style="font-size:.8rem;color:#64748b;line-height:1.5">{item["opis"]}</span>
+                                </div>
+                                <a href="{item["link"]}" target="_blank" style="background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:6px;padding:4px 12px;font-size:.75rem;font-weight:700;white-space:nowrap;text-decoration:none">Przejrzyj →</a>
+                            </div>
+                        </div>''', unsafe_allow_html=True)
+                    st.markdown("<br>", unsafe_allow_html=True)
+
+                # Eksport
+                df_glob = pd.DataFrame(dane["konkurencja_globalna"])
+                st.download_button(
+                    "📥 Pobierz listę globalnych konkurentów CSV",
+                    df_glob.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig"),
+                    file_name=f"konkurencja_globalna_{produkt_b2c}.csv",
+                    mime="text/csv"
+                )
+
+        # ── TAB 5: STRATEGIA + META ADS ──
         with t5:
             st.markdown("### 🎯 Strategia wejscia na rynek + Gotowe reklamy Meta Ads")
             strat = wyniki_ai.get("strategia", {})
-
             st.markdown("#### 📋 Rekomendowane kanaly (kolejnosc ataku)")
             col_s1, col_s2, col_s3 = st.columns(3)
             with col_s1:
@@ -666,17 +777,14 @@ else:
                 st.markdown(f'<div class="insight-card"><div class="insight-title">🥈 {strat.get("kanal_2","Kanal 2")}</div><div class="insight-text">{strat.get("kanal_2_opis","")}</div></div>', unsafe_allow_html=True)
             with col_s3:
                 st.markdown(f'<div class="insight-card"><div class="insight-title">🥉 {strat.get("kanal_3","Kanal 3")}</div><div class="insight-text">{strat.get("kanal_3_opis","")}</div></div>', unsafe_allow_html=True)
-
             if strat.get("budzet_start"):
                 st.markdown(f'<div class="warning-box">💰 <b>Rekomendowany budzet startowy:</b> {strat.get("budzet_start","")}</div>', unsafe_allow_html=True)
-
             st.markdown("<br>", unsafe_allow_html=True)
             st.markdown("#### 📣 3 Gotowe zestawy reklamowe Meta Ads")
             st.markdown('<div class="info-box">Skopiuj i wklej bezposrednio do Facebook Ads Manager. Przetestuj wszystkie 3 warianty i zostaw ten ktory ma najlepszy CTR.</div>', unsafe_allow_html=True)
             st.markdown("<br>", unsafe_allow_html=True)
-
             for ad in wyniki_ai.get("meta_ads", []):
                 st.markdown(f'<div class="ads-card"><div style="font-size:.72rem;color:#6366f1;font-weight:700;text-transform:uppercase;margin-bottom:.5rem">{ad.get("wariant","")}</div><div class="ads-headline">{ad.get("headline","")}</div><div style="font-size:.88rem;color:#374151;margin:.6rem 0;line-height:1.6">{ad.get("primary","")}</div><div style="background:#2563eb;color:white;display:inline-block;padding:6px 16px;border-radius:6px;font-size:.8rem;font-weight:700">{ad.get("cta","")}</div></div>', unsafe_allow_html=True)
 
 st.markdown("<hr>", unsafe_allow_html=True)
-st.markdown('<div style="text-align:center;font-size:.72rem;color:#cbd5e1">AI Lead Gen PRO v3.0 — B2B + B2C Intelligence — Powered by Claude AI + Serper.dev</div>', unsafe_allow_html=True)
+st.markdown('<div style="text-align:center;font-size:.72rem;color:#cbd5e1">AI Lead Gen PRO v3.1 — B2B + B2C Intelligence — Powered by Claude AI + Serper.dev</div>', unsafe_allow_html=True)
