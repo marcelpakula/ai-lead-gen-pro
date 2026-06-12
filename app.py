@@ -846,8 +846,8 @@ else:
             if strat.get("budzet_start"):
                 st.markdown(f'<div class="warning-box">💰 <b>Rekomendowany budzet startowy:</b> {strat.get("budzet_start","")}</div>', unsafe_allow_html=True)
             st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown("#### 📣 3 Gotowe zestawy reklamowe Meta Ads")
-            st.markdown('<div class="info-box">Skopiuj i wklej bezposrednio do Facebook Ads Manager. Przetestuj wszystkie 3 warianty i zostaw ten ktory ma najlepszy CTR.</div>', unsafe_allow_html=True)
+            st.markdown("#### 🎯 3 Archetypy klienta do targetowania w reklamach")
+            st.markdown('<div class="info-box">Skopiuj i wklej bezposrednio do Facebook Ads Manager. Kazdy wariant celuje w inny typ klienta - przetestuj wszystkie 3 i zostaw ten ktory ma najlepszy CTR.</div>', unsafe_allow_html=True)
             st.markdown("<br>", unsafe_allow_html=True)
             for ad in wyniki_ai.get("meta_ads", []):
                 st.markdown(f'<div class="ads-card"><div style="font-size:.72rem;color:#6366f1;font-weight:700;text-transform:uppercase;margin-bottom:.5rem">{ad.get("wariant","")}</div><div class="ads-headline">{ad.get("headline","")}</div><div style="font-size:.88rem;color:#374151;margin:.6rem 0;line-height:1.6">{ad.get("primary","")}</div><div style="background:#2563eb;color:white;display:inline-block;padding:6px 16px;border-radius:6px;font-size:.8rem;font-weight:700">{ad.get("cta","")}</div></div>', unsafe_allow_html=True)
