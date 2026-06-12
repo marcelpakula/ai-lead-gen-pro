@@ -749,16 +749,11 @@ if st.session_state.tryb_modulu == "B2B":
         st.markdown("<br>", unsafe_allow_html=True)
         tab1,tab2,tab3,tab4,tab5,tab6 = st.tabs(["Tabela wynikow","SMS / Cold Call","Sekwencja Email","TOP 5","Analiza","Eksport"])
         with tab1:
-            with st.expander("ℹ️ Co oznacza kolumna 'Reklamuje sie'?"):
-                st.markdown("""
-**Kolumna 'Reklamuje sie' pokazuje, czy firma ma zainstalowane piksele/tagi reklamowe** (Meta Pixel, Google Ads, TikTok Pixel itp.) na swojej stronie.
-
-- **Wykryty piksel (np. Meta Pixel)** = firma juz wydaje pieniadze na reklamy online, sledzi konwersje i ma swiadomosc marketingu cyfrowego. To latwiejszy klient na uslugi typu kampanie reklamowe, optymalizacja, retargeting - bo nie trzeba go przekonywac, ze reklama online dziala.
-- **"NIE"** = firma nie reklamuje sie online (albo piksel nie jest poprawnie zainstalowany). To sygnal duzej szansy - konkurencja, ktora ma piksel, przechwytuje klientow przez retargeting, a ta firma traci ich bezpowrotnie. Mocny argument: "Konkurencja Was retargetuje, a Was nikt nie scigaja po stronie - kazdy odwiedzajacy odchodzi na zawsze".
-
-Ta informacja jest automatycznie wykorzystywana przez AI w SMS/Call/Email jako dodatkowy argument sprzedazowy.
-""")
-            st.dataframe(df[["Status","Nazwa","Telefon","WWW","Opinie","Ocena Google","Ocena strony","Technologia","Reklamuje sie","SSL","Rezerwacja","AI Score","Strata/mc (PLN)","Szansa %","Problem","Problemy WWW"]], use_container_width=True, hide_index=True, column_config={"AI Score": st.column_config.ProgressColumn("AI Score", min_value=0, max_value=99, format="%d/99"), "Ocena strony": st.column_config.ProgressColumn("Ocena strony", min_value=0, max_value=10, format="%d/10"), "Strata/mc (PLN)": st.column_config.NumberColumn("Strata/mc (PLN)", format="%d zl"), "Szansa %": st.column_config.ProgressColumn("Szansa %", min_value=0, max_value=100, format="%d%%")})
+            st.dataframe(df[["Status","Nazwa","Telefon","AI Score","Strata/mc (PLN)"]], use_container_width=True, hide_index=True, column_config={"AI Score": st.column_config.ProgressColumn("AI Score", min_value=0, max_value=99, format="%d/99"), "Strata/mc (PLN)": st.column_config.NumberColumn("Strata/mc (PLN)", format="%d zl")})
+            with st.expander("📈 Szansa i diagnoza problemu"):
+                st.dataframe(df[["Nazwa","WWW","Szansa %","Problem"]], use_container_width=True, hide_index=True, column_config={"Szansa %": st.column_config.ProgressColumn("Szansa %", min_value=0, max_value=100, format="%d%%")})
+            with st.expander("🔍 Szczegoly techniczne (CMS, piksele, SSL, rezerwacje...)"):
+                st.dataframe(df[["Nazwa","Opinie","Ocena Google","Ocena strony","Technologia","Reklamuje sie","SSL","Rezerwacja","Problemy WWW"]], use_container_width=True, hide_index=True, column_config={"Ocena strony": st.column_config.ProgressColumn("Ocena strony", min_value=0, max_value=10, format="%d/10")})
         with tab2:
             for _, row in df.head(25).iterrows():
                 with st.expander(row["Status"] + " | " + row["Nazwa"] + " — " + row["Telefon"] + " | Score: " + str(row["AI Score"]) + "/99"):
@@ -781,6 +776,22 @@ Ta informacja jest automatycznie wykorzystywana przez AI w SMS/Call/Email jako d
                 with tc: st.info("SMS: " + row["SMS"])
                 st.markdown("<hr>", unsafe_allow_html=True)
         with tab5:
+            with st.expander("📖 Slownik - co oznaczaja te wskazniki?", expanded=True):
+                st.markdown("""
+**💸 Strata/mc (PLN)** - szacowana wartosc klientow, ktorych firma traci kazdego miesiaca przez braki na stronie WWW (brak SSL, brak rezerwacji online, slaba strona itp.). To Twoj glowny argument w rozmowie - "tracicie X zl miesiecznie".
+
+**🛠️ Technologia** - na jakiej platformie/CMS dziala strona firmy (WordPress, Wix, wlasny kod itp.). Strony na slabych platformach (Wix, Squarespace) lub "wlasny kod / nieznana" to sygnal przestarzalej strony - latwy argument na rebuild.
+
+**📣 Reklamuje sie** - czy firma ma zainstalowane piksele reklamowe (Meta Pixel, Google Ads, TikTok Pixel itp.).
+- **Wykryty piksel** = firma juz wydaje pieniadze na reklamy online i rozumie marketing cyfrowy - latwiejszy klient na kampanie/optymalizacje.
+- **"NIE"** = firma nie reklamuje sie online. Mocny argument: "Konkurencja Was retargetuje, a Was nikt nie sciga po stronie - kazdy odwiedzajacy odchodzi na zawsze".
+
+**🎯 AI Score** - ogolna ocena (0-99) jak dobrym leadem jest ta firma - im wyzej, tym wiekszy potencjal sprzedazowy.
+
+**📊 Szansa %** - oszacowana przez AI szansa na konwersje tego leada w klienta.
+
+**Status (HOT/WARM/COLD)** - priorytet kontaktu. HOT = kontaktuj sie najpierw.
+""")
             ta, tb, tc = st.columns(3)
             with ta:
                 st.markdown("**Rozklad statusow:**")
