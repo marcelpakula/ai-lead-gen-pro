@@ -476,6 +476,7 @@ with st.sidebar:
     st.markdown("<br>", unsafe_allow_html=True)
     st.progress(procent / 100)
     st.markdown(f'<div class="skany-bar">Kod: <b>{info["kod"]}</b> | {wykorzystane}/{max_s} | Wygasa: {info["data_wygasniecia"]}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="skany-bar">DEBUG — Anthropic key: {"OK (" + str(len(AK)) + " znakow)" if AK else "BRAK"} | Serper key: {"OK" if SK else "BRAK"}</div>', unsafe_allow_html=True)
     st.markdown("---")
     st.markdown("### Ustawienia B2B")
     tryb_skanu = st.radio("Tryb skanu", ["Szybki (1 zapytanie)", "Sredni (3 zapytania)", "Masowy (6 zapytan AUTO)"])
