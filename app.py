@@ -286,38 +286,83 @@ def oblicz_score(f, wer):
     if not wer["ma_rezerwacje"]: s += 5
     return min(s, 99)
 
-def oblicz_strate_finansowa(f, wer):
-    """Szacuje mozliwa miesieczna strate finansowa (PLN) wynikajaca z braku/slabej strony WWW."""
-    SREDNI_KOSZYK = 150  # PLN, szacunkowa wartosc jednej transakcji/klienta
+WARTOSC_KLIENTA_NISZA = {
+    "dekarz": 12000, "dekarstwo": 12000, "remonty": 8000, "budowlan": 8000, "elewacj": 8000,
+    "stolarz": 5000, "okna": 6000, "ogrodzenia": 4000, "instalacje": 3500, "elektryk": 1500,
+    "hydraulik": 1200, "klimatyzacja": 4000, "pompy ciepla": 15000, "fotowoltaika": 18000,
+    "prawnik": 3000, "ksiegowo": 1500, "adwokat": 4000, "notariusz": 2000,
+    "stomatolog": 2500, "dentyst": 2500, "klinika": 3000, "medycyna estetyczna": 2000, "kosmetolog": 600,
+    "weterynarz": 800, "fryzjer": 150, "barber": 150, "salon": 200, "spa": 400, "masaz": 250,
+    "restauracja": 300, "catering": 1500, "hotel": 1500, "nocleg": 1200,
+    "auto": 1500, "mechanik": 800, "warsztat": 800, "wulkanizacja": 400, "detailing": 600,
+    "fitness": 250, "trener": 400, "siłownia": 250,
+    "nieruchomosci": 10000, "deweloper": 20000, "agencja": 2000,
+}
+
+def oblicz_strate_finansowa(f, wer, branza=""):
+    """Szacuje mozliwa miesieczna strate finansowa (PLN) wynikajaca z braku/slabej strony WWW.
+    Wartosc jednego klienta zalezy od niszy (np. dekarz ~12000 PLN vs fryzjer ~150 PLN)."""
+    branza_l = branza.lower()
+    wartosc_klienta = 300  # domyslna
+    for klucz, wart in WARTOSC_KLIENTA_NISZA.items():
+        if klucz in branza_l:
+            wartosc_klienta = wart
+            break
+
     if f["www"] in ["brak","sprawdz na stronie",""]:
-        utraceni_klienci = 25  # brak strony = duza utracona widocznosc
+        utraceni_klienci = 5  # brak strony = realna utracona widocznosc w Google
     else:
-        utraceni_klienci = len(wer["problemy"]) * 5
-        if not wer["ma_rezerwacje"]: utraceni_klienci += 5
-    return utraceni_klienci * SREDNI_KOSZYK
+        utraceni_klienci = max(1, len(wer["problemy"]))
+        if not wer["ma_rezerwacje"]: utraceni_klienci += 1
+
+    return utraceni_klienci * wartosc_klienta
 
 def status_leada(score):
     if score >= 80: return "HOT"
     elif score >= 60: return "WARM"
     else: return "COLD"
 
-def analiza_claude_b2b(f, branza, ak, wer, score, strata=0):
+def analiza_claude_b2b(f, branza, ak, wer, score, strata=0, lok=""):
     FALLBACK = {"problem": "Brak analizy AI", "sms": "Dzien dobry! Budujemy strony dla firm z branzy " + branza + ". Czy moge przedstawic oferte?", "call": "Dzien dobry, dzwonie w sprawie strony internetowej. Czy maja Panstwo chwile?", "email_temat": "Propozycja wspolpracy", "email_tresc": "Dzien dobry, chcielibysmy przedstawic oferte na strone WWW.", "followup1": "Czy mieli Panstwo okazje zapoznac sie z nasza oferta?", "followup2": "To ostatnia wiadomosc — czy moge pomoc?", "szansa": 50}
     if not ak: return FALLBACK
     try:
         prob_str = ", ".join(wer["problemy"]) if wer["problemy"] else "brak problemow"
-        user_prompt = f"""Firma: {f["nazwa"]}
-Branża: {branza}
-Ocena WWW: {wer["ocena_www"]}/10
-Liczba opinii: {f["opinie"]}
-Problemy strony: {prob_str}
-Szacowana utracona miesieczna sprzedaz przez te problemy: {strata} PLN
+        user_prompt = f"""NAZWA FIRMY: {f["nazwa"]}
+NISZA/BRANZA: {branza}
+MIASTO/LOKALIZACJA: {lok}
+OCENA STRONY WWW: {wer["ocena_www"]}/10
+LICZBA OPINII GOOGLE: {f["opinie"]}
+OCENA GOOGLE: {f["ocena"]}
+WYKRYTE BLEDY (killer flaws): {prob_str}
+SZACOWANA UTRACONA SPRZEDAZ: {strata} PLN miesiecznie (wyliczona na bazie wartosci typowego klienta w tej niszy)
 
-Zwróć JSON z polami: problem, sms, call, email_temat, email_tresc, followup1, followup2, szansa"""
+Wygeneruj komunikaty wedlug systemu opisanego w instrukcjach. Zwroc JSON z polami: problem, sms, call, email_temat, email_tresc, followup1, followup2, szansa"""
 
         tekst = claude_call(
-            'Jesteś ekspertem od cold outreach B2B. Odpowiadasz WYŁĄCZNIE czystym JSON bez żadnego tekstu przed ani po. Format: {"problem": "max 10 slow", "sms": "SMS do 160 znakow", "call": "3 zdania", "email_temat": "max 8 slow", "email_tresc": "5 zdan", "followup1": "2 zdania", "followup2": "2 zdania", "szansa": liczba_0_100}. Jesli podana jest szacowana utracona sprzedaz (PLN/mc), WYKORZYSTAJ te konkretna liczbe jako mocny argument w SMS, call i email_tresc — to najsilniejszy hak w cold outreach.',
-            user_prompt, ak, 500
+            """Jesteś Senior Prompt Engineerem i elitarnym copywriterem direct-response (styl Jordana Belforta i Dana Kennedy'ego). Piszesz teksty cold outreach (SMS, Cold Call, Email) dla polskich lokalnych biznesow na podstawie realnych danych ze skanu. Odpowiadasz WYŁĄCZNIE czystym JSON, zero tekstu przed/po, zero markdown.
+
+ZAKAZANE FRAZY (uzycie dyskwalifikuje wiadomosc):
+- "Zauwazylismy, ze..." / "Widzimy, ze..." / "Sprawdzilismy Panstwa strone..."
+- "Chetnie pomozemy" / "Oferujemy kompleksowe uslugi" / "Szeroka gama rozwiazan"
+- "Zbudujemy Ci strone w 2 tygodnie" (zbyt tania sprzedaz na dzien dobry)
+- Sztuczne spoufalanie ("Czesc Danuta!") wobec tradycyjnych lokalnych biznesow - zwracaj sie formalnie ("Dzien dobry, czy rozmawiam z wlascicielem/wlascicielka [niszy]?")
+
+ZASADA 1 - KONKRETNA STRATA: Wplec podana kwote SZACOWANEJ UTRACONEJ SPRZEDAZY (PLN/mc) jako glowny argument - to realna, wyliczona dla tej niszy liczba, nie ogolnik.
+
+ZASADA 2 - KILLER FLAW: Zamiast ogolnikow, uderz w KONKRETNY wykryty blad:
+- Brak SSL -> "Panstwa strona wyswietla klientom ostrzezenie o oszustwie i kradziezy danych"
+- Brak mobile -> "Strona rozjezdza sie na telefonach, 70% ludzi ucieka po 2 sekundach"
+- Brak WWW -> "Konkurencja zjada klientow, ktorzy szukali Was w Google w tym miesiacu - dla internetu nie istniejecie"
+- Brak rezerwacji online -> "Klienci uciekaja do konkurencji, bo nie moga zapisac sie online o 23:00"
+
+ZASADA 3 - STRUKTURA (Pattern Interrupt):
+- SMS (max 160 znakow): intryguje, wywoluje cisnienie, ZERO sprzedawania. Tylko haczyk + pytanie o kontakt.
+- CALL (3-4 zdania, pierwsze 15 sekund decyduje): przelamuje schemat, uderza w konkretny blad + kwote straty, konczy pytaniem czy ma czas na 2 minuty/raport.
+- EMAIL (5 zdan): pierwszy kontakt to wartosc/audyt (co klient traci), NIE sprzedaz strony. Temat max 8 slow.
+- FOLLOWUP1/FOLLOWUP2: krotkie, nie powtarzaj tej samej kwoty/argumentu co w SMS/call - dorzuc nowy detal lub inny kat (np. social proof, urgency).
+
+Format JSON: {"problem": "max 8 slow - nazwa killer flaw", "sms": "string", "call": "string", "email_temat": "string", "email_tresc": "string", "followup1": "string", "followup2": "string", "szansa": liczba_0_100}""",
+            user_prompt, ak, 700
         )
         wynik = safe_parse_json(tekst)
         if wynik is None: return FALLBACK
@@ -613,8 +658,8 @@ if st.session_state.tryb_modulu == "B2B":
             wer = weryfikuj_strone(f["www"]) if weryfikuj_www else {"dziala": True, "ssl": False, "ocena_www": 5, "problemy": [], "ma_rezerwacje": False, "ma_social": False}
             score = oblicz_score(f, wer)
             if score < min_score: continue
-            strata = oblicz_strate_finansowa(f, wer)
-            ai = analiza_claude_b2b(f, branza, AK, wer, score, strata)
+            strata = oblicz_strate_finansowa(f, wer, branza)
+            ai = analiza_claude_b2b(f, branza, AK, wer, score, strata, lok)
             rows.append({"Status": status_leada(score), "Nazwa": f["nazwa"], "Telefon": f["telefon"], "WWW": f["www"], "Adres": f["adres"], "Opinie": f["opinie"], "Ocena Google": f["ocena"], "Ocena strony": wer["ocena_www"], "SSL": "TAK" if wer["ssl"] else "NIE", "Rezerwacja": "TAK" if wer["ma_rezerwacje"] else "NIE", "Problemy WWW": " | ".join(wer["problemy"]) if wer["problemy"] else "OK", "AI Score": score, "Strata/mc (PLN)": strata, "Szansa %": ai.get("szansa",50), "Problem": ai.get("problem",""), "SMS": ai.get("sms",""), "Call": ai.get("call",""), "Email temat": ai.get("email_temat",""), "Email tresc": ai.get("email_tresc",""), "Followup 1": ai.get("followup1",""), "Followup 2": ai.get("followup2","")})
         bar.progress(100); msg.empty(); stats_box.empty(); bar.empty()
         if not rows: st.warning("Brak wynikow. Zmien filtry."); st.stop()
