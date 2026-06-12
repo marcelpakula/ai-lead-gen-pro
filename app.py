@@ -450,7 +450,7 @@ Struktura JSON którą musisz zwrócić:
   ]
 }"""
 
-        tekst = claude_call(system_prompt, user_prompt, ak, 8000, model="claude-sonnet-4-6")
+        tekst = claude_call(system_prompt, user_prompt, ak, 8000)
         wynik = safe_parse_json(tekst)
         if wynik is None:
             FALLBACK["mapa_popytu"]["insight"] = "Blad parsowania JSON. Sprobuj ponownie."
