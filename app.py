@@ -254,8 +254,28 @@ def szukaj_web(q, sk, limit=10):
         return [{"nazwa": p.get("title","?"), "telefon": "sprawdz na stronie", "www": p.get("link","brak"), "opinie": 0, "ocena": 0, "adres": p.get("snippet","")[:100], "kategoria": ""} for p in r.json().get("organic",[])]
     except: return []
 
+TECH_SYGNATURY = [
+    ("WordPress", ["wp-content", "wp-includes", "/wp-json"]),
+    ("WooCommerce", ["woocommerce"]),
+    ("Shopify", ["cdn.shopify.com", "shopify"]),
+    ("Wix", ["wix.com", "wixstatic", "_wixcss"]),
+    ("Squarespace", ["squarespace"]),
+    ("Webflow", ["webflow"]),
+    ("PrestaShop", ["prestashop"]),
+    ("Joomla", ["joomla"]),
+    ("Drupal", ["drupal"]),
+    ("Strikingly", ["strikingly"]),
+]
+
+def wykryj_technologie(t):
+    """Wykrywa platforme/CMS na podstawie kodu HTML strony."""
+    for nazwa, sygnatury in TECH_SYGNATURY:
+        if any(s in t for s in sygnatury):
+            return nazwa
+    return "Wlasny kod / nieznana"
+
 def weryfikuj_strone(url):
-    if not url or url in ["brak","sprawdz na stronie",""]: return {"dziala": False, "ssl": False, "ocena_www": 0, "problemy": ["Brak strony WWW"], "ma_rezerwacje": False, "ma_social": False}
+    if not url or url in ["brak","sprawdz na stronie",""]: return {"dziala": False, "ssl": False, "ocena_www": 0, "problemy": ["Brak strony WWW"], "ma_rezerwacje": False, "ma_social": False, "technologia": "Brak strony"}
     try:
         r = requests.get(url, timeout=7, headers={"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)"}, allow_redirects=True)
         ssl = url.startswith("https"); t = r.text.lower(); problemy = []
@@ -267,8 +287,11 @@ def weryfikuj_strone(url):
         if not any(x in t for x in ["cena","cennik","price"]): problemy.append("Brak cennika")
         ma_rez = any(x in t for x in ["booksy","calendly","rezerwacja","booking"])
         if not ma_rez: problemy.append("Brak rezerwacji online")
-        return {"dziala": True, "ssl": ssl, "ocena_www": max(1, 10-len(problemy)), "problemy": problemy, "ma_rezerwacje": ma_rez, "ma_social": any(x in t for x in ["facebook","instagram","tiktok"])}
-    except: return {"dziala": False, "ssl": False, "ocena_www": 0, "problemy": ["Strona niedostepna"], "ma_rezerwacje": False, "ma_social": False}
+        technologia = wykryj_technologie(t)
+        if technologia in ["Wix", "Squarespace", "Strikingly"]: problemy.append("Slaba platforma (" + technologia + ")")
+        elif technologia == "Wlasny kod / nieznana": problemy.append("Przestarzala strona (brak rozpoznanej platformy)")
+        return {"dziala": True, "ssl": ssl, "ocena_www": max(1, 10-len(problemy)), "problemy": problemy, "ma_rezerwacje": ma_rez, "ma_social": any(x in t for x in ["facebook","instagram","tiktok"]), "technologia": technologia}
+    except: return {"dziala": False, "ssl": False, "ocena_www": 0, "problemy": ["Strona niedostepna"], "ma_rezerwacje": False, "ma_social": False, "technologia": "Niedostepna"}
 
 def oblicz_score(f, wer):
     s = 40
@@ -678,12 +701,12 @@ if st.session_state.tryb_modulu == "B2B":
             if bt and f["telefon"] in ["brak","","sprawdz na stronie"]: continue
             if f["opinie"] > mo or f["opinie"] < min_op: continue
             bar.progress(50 + int(40 * i / max(len(wszystkie),1))); msg.info("Analizuje: " + f["nazwa"])
-            wer = weryfikuj_strone(f["www"]) if weryfikuj_www else {"dziala": True, "ssl": False, "ocena_www": 5, "problemy": [], "ma_rezerwacje": False, "ma_social": False}
+            wer = weryfikuj_strone(f["www"]) if weryfikuj_www else {"dziala": True, "ssl": False, "ocena_www": 5, "problemy": [], "ma_rezerwacje": False, "ma_social": False, "technologia": "Nie sprawdzano"}
             score = oblicz_score(f, wer)
             if score < min_score: continue
             strata = oblicz_strate_finansowa(f, wer, branza)
             ai = analiza_claude_b2b(f, branza, AK, wer, score, strata, lok)
-            rows.append({"Status": status_leada(score), "Nazwa": f["nazwa"], "Telefon": f["telefon"], "WWW": f["www"], "Adres": f["adres"], "Opinie": f["opinie"], "Ocena Google": f["ocena"], "Ocena strony": wer["ocena_www"], "SSL": "TAK" if wer["ssl"] else "NIE", "Rezerwacja": "TAK" if wer["ma_rezerwacje"] else "NIE", "Problemy WWW": " | ".join(wer["problemy"]) if wer["problemy"] else "OK", "AI Score": score, "Strata/mc (PLN)": strata, "Szansa %": ai.get("szansa",50), "Problem": ai.get("problem",""), "SMS": ai.get("sms",""), "Call": ai.get("call",""), "Email temat": ai.get("email_temat",""), "Email tresc": ai.get("email_tresc",""), "Followup 1": ai.get("followup1",""), "Followup 2": ai.get("followup2","")})
+            rows.append({"Status": status_leada(score), "Nazwa": f["nazwa"], "Telefon": f["telefon"], "WWW": f["www"], "Adres": f["adres"], "Opinie": f["opinie"], "Ocena Google": f["ocena"], "Ocena strony": wer["ocena_www"], "Technologia": wer["technologia"], "SSL": "TAK" if wer["ssl"] else "NIE", "Rezerwacja": "TAK" if wer["ma_rezerwacje"] else "NIE", "Problemy WWW": " | ".join(wer["problemy"]) if wer["problemy"] else "OK", "AI Score": score, "Strata/mc (PLN)": strata, "Szansa %": ai.get("szansa",50), "Problem": ai.get("problem",""), "SMS": ai.get("sms",""), "Call": ai.get("call",""), "Email temat": ai.get("email_temat",""), "Email tresc": ai.get("email_tresc",""), "Followup 1": ai.get("followup1",""), "Followup 2": ai.get("followup2","")})
         bar.progress(100); msg.empty(); stats_box.empty(); bar.empty()
         if not rows: st.warning("Brak wynikow. Zmien filtry."); st.stop()
         df = pd.DataFrame(rows)
@@ -710,7 +733,7 @@ if st.session_state.tryb_modulu == "B2B":
         st.markdown("<br>", unsafe_allow_html=True)
         tab1,tab2,tab3,tab4,tab5,tab6 = st.tabs(["Tabela wynikow","SMS / Cold Call","Sekwencja Email","TOP 5","Analiza","Eksport"])
         with tab1:
-            st.dataframe(df[["Status","Nazwa","Telefon","WWW","Opinie","Ocena Google","Ocena strony","SSL","Rezerwacja","AI Score","Strata/mc (PLN)","Szansa %","Problem","Problemy WWW"]], use_container_width=True, hide_index=True, column_config={"AI Score": st.column_config.ProgressColumn("AI Score", min_value=0, max_value=99, format="%d/99"), "Ocena strony": st.column_config.ProgressColumn("Ocena strony", min_value=0, max_value=10, format="%d/10"), "Strata/mc (PLN)": st.column_config.NumberColumn("Strata/mc (PLN)", format="%d zl"), "Szansa %": st.column_config.ProgressColumn("Szansa %", min_value=0, max_value=100, format="%d%%")})
+            st.dataframe(df[["Status","Nazwa","Telefon","WWW","Opinie","Ocena Google","Ocena strony","Technologia","SSL","Rezerwacja","AI Score","Strata/mc (PLN)","Szansa %","Problem","Problemy WWW"]], use_container_width=True, hide_index=True, column_config={"AI Score": st.column_config.ProgressColumn("AI Score", min_value=0, max_value=99, format="%d/99"), "Ocena strony": st.column_config.ProgressColumn("Ocena strony", min_value=0, max_value=10, format="%d/10"), "Strata/mc (PLN)": st.column_config.NumberColumn("Strata/mc (PLN)", format="%d zl"), "Szansa %": st.column_config.ProgressColumn("Szansa %", min_value=0, max_value=100, format="%d%%")})
         with tab2:
             for _, row in df.head(25).iterrows():
                 with st.expander(row["Status"] + " | " + row["Nazwa"] + " — " + row["Telefon"] + " | Score: " + str(row["AI Score"]) + "/99"):
