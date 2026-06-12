@@ -209,13 +209,13 @@ def safe_parse_json(text):
         return None
 
 # ── HELPER: wywołanie Claude z systemowym promptem ──
-def claude_call(system_prompt, user_prompt, ak, max_tokens=800):
+def claude_call(system_prompt, user_prompt, ak, max_tokens=800, model="claude-haiku-4-5"):
     """Wywołuje Claude API z system promptem wymuszającym czysty JSON."""
     r = requests.post(
         "https://api.anthropic.com/v1/messages",
         headers={"x-api-key": ak, "anthropic-version": "2023-06-01", "content-type": "application/json"},
         json={
-            "model": "claude-haiku-4-5",
+            "model": model,
             "max_tokens": max_tokens,
             "system": system_prompt,
             "messages": [{"role": "user", "content": user_prompt}]
@@ -450,7 +450,7 @@ Struktura JSON którą musisz zwrócić:
   ]
 }"""
 
-        tekst = claude_call(system_prompt, user_prompt, ak, 8000)
+        tekst = claude_call(system_prompt, user_prompt, ak, 8000, model="claude-sonnet-4-6")
         wynik = safe_parse_json(tekst)
         if wynik is None:
             FALLBACK["mapa_popytu"]["insight"] = "Blad parsowania JSON. Sprobuj ponownie."
