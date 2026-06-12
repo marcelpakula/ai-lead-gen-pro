@@ -389,7 +389,8 @@ def analiza_ai_b2c(produkt, problem, lok, grupa, budzet, dane, ak):
         "mapa_konkurencji": {"gracze": ["Brak danych"], "slabe_strony": "Dodaj klucz API", "luka_rynkowa": "Dodaj klucz API"},
         "analiza_globalna": {"co_robia_dobrze": ["Brak danych"], "co_robia_zle": ["Brak danych"], "luka": "Brak danych", "jak_wygrac": ["Brak danych"]},
         "strategia": {"kanal_1": "Meta Ads", "kanal_1_opis": "Dodaj klucz API", "kanal_2": "Grupy FB", "kanal_2_opis": "Dodaj klucz API", "kanal_3": "TikTok", "kanal_3_opis": "Dodaj klucz API", "budzet_start": "Dodaj klucz API"},
-        "meta_ads": [{"wariant": "Wariant 1", "headline": "Przykladowy naglowek", "primary": "Przykladowy tekst reklamy. Dodaj klucz Anthropic API.", "cta": "Kup teraz"}]
+        "meta_ads": [{"wariant": "Wariant 1", "headline": "Przykladowy naglowek", "primary": "Przykladowy tekst reklamy. Dodaj klucz Anthropic API.", "cta": "Kup teraz"}],
+        "video_scenariusze": [{"tytul": "Scenariusz 1", "hook": "Dodaj klucz API", "problem": "Dodaj klucz API", "rozwiazanie": "Dodaj klucz API", "produkt": "Dodaj klucz API", "cta": "Dodaj klucz API"}]
     }
     if not ak: return FALLBACK
 
@@ -450,8 +451,15 @@ Struktura JSON którą musisz zwrócić:
     {"wariant": "Wariant 1 - Bol", "headline": "max 40 znakow", "primary": "2-3 zdania", "cta": "string"},
     {"wariant": "Wariant 2 - Rozwiazanie", "headline": "max 40 znakow", "primary": "2-3 zdania", "cta": "string"},
     {"wariant": "Wariant 3 - Dowod spoleczny", "headline": "max 40 znakow", "primary": "2-3 zdania", "cta": "string"}
+  ],
+  "video_scenariusze": [
+    {"tytul": "string - krotka nazwa scenariusza", "hook": "string - pierwsze 3 sekundy, mocny hak przerywajacy scrollowanie", "problem": "string - przedstawienie problemu klienta w jezyku naturalnym, storytelling", "rozwiazanie": "string - jak produkt rozwiazuje ten problem, narracyjnie", "produkt": "string - pokazanie produktu i jego kluczowych cech/zalet", "cta": "string - wezwanie do akcji"},
+    {"tytul": "string", "hook": "string", "problem": "string", "rozwiazanie": "string", "produkt": "string", "cta": "string"},
+    {"tytul": "string", "hook": "string", "problem": "string", "rozwiazanie": "string", "produkt": "string", "cta": "string"}
   ]
-}"""
+}
+
+Sekcja "video_scenariusze" to 3 rozne scenariusze na natywne, storytellingowe filmy reklamowe do Meta Ads (Reels/TikTok). Kazdy scenariusz musi miec strukture: hook (3 sek, zatrzymuje scroll) -> problem (storytelling, emocje klienta) -> rozwiazanie (jak produkt to rozwiazuje) -> produkt (cechy, demo) -> cta. Pisz konwersacyjnie, jak influencer, nie jak reklama korporacyjna."""
 
         tekst = claude_call(system_prompt, user_prompt, ak, 8000)
         wynik = safe_parse_json(tekst)
@@ -693,12 +701,13 @@ else:
         st.markdown("<br>", unsafe_allow_html=True)
 
         # ── 5 ZAKŁADEK — nowa struktura ──
-        t1, t2, t3, t4, t5 = st.tabs([
+        t1, t2, t3, t4, t5, t6 = st.tabs([
             "📊 Mapa Popytu",
             "💬 Glos Klienta",
             "🏪 Mapa Konkurencji",
             "🌍 Analiza Konkurencji Globalnej",
-            "🎯 Strategia + Meta Ads"
+            "🎯 Strategia + Meta Ads",
+            "🎬 Scenariusze Video"
         ])
 
         # ── TAB 1: MAPA POPYTU ──
@@ -851,6 +860,20 @@ else:
             st.markdown("<br>", unsafe_allow_html=True)
             for ad in wyniki_ai.get("meta_ads", []):
                 st.markdown(f'<div class="ads-card"><div style="font-size:.72rem;color:#6366f1;font-weight:700;text-transform:uppercase;margin-bottom:.5rem">{ad.get("wariant","")}</div><div class="ads-headline">{ad.get("headline","")}</div><div style="font-size:.88rem;color:#374151;margin:.6rem 0;line-height:1.6">{ad.get("primary","")}</div><div style="background:#2563eb;color:white;display:inline-block;padding:6px 16px;border-radius:6px;font-size:.8rem;font-weight:700">{ad.get("cta","")}</div></div>', unsafe_allow_html=True)
+
+        with t6:
+            st.markdown("#### 🎬 3 Scenariusze na natywne filmy reklamowe (Reels/TikTok)")
+            st.markdown('<div class="info-box">Kazdy scenariusz to gotowy szkielet pod storytellingowy filmik: Hook -> Problem -> Rozwiazanie -> Produkt -> CTA. Sfilmuj wedlug schematu i wklej jako kreacje video do Meta Ads.</div>', unsafe_allow_html=True)
+            st.markdown("<br>", unsafe_allow_html=True)
+            for vid in wyniki_ai.get("video_scenariusze", []):
+                st.markdown(f'''<div class="ads-card">
+<div class="ads-headline">🎬 {vid.get("tytul","")}</div>
+<div style="margin-top:.6rem"><b style="color:#f59e0b">🪝 HOOK (0-3s):</b> <span style="color:#374151">{vid.get("hook","")}</span></div>
+<div style="margin-top:.4rem"><b style="color:#ef4444">😣 PROBLEM:</b> <span style="color:#374151">{vid.get("problem","")}</span></div>
+<div style="margin-top:.4rem"><b style="color:#10b981">✅ ROZWIAZANIE:</b> <span style="color:#374151">{vid.get("rozwiazanie","")}</span></div>
+<div style="margin-top:.4rem"><b style="color:#6366f1">📦 PRODUKT:</b> <span style="color:#374151">{vid.get("produkt","")}</span></div>
+<div style="margin-top:.6rem"><span style="background:#2563eb;color:white;display:inline-block;padding:6px 16px;border-radius:6px;font-size:.8rem;font-weight:700">{vid.get("cta","")}</span></div>
+</div>''', unsafe_allow_html=True)
 
 st.markdown("<hr>", unsafe_allow_html=True)
 st.markdown('<div style="text-align:center;font-size:.72rem;color:#cbd5e1">AI Lead Gen PRO v3.1 — B2B + B2C Intelligence — Powered by Claude AI + Serper.dev</div>', unsafe_allow_html=True)
