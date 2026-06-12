@@ -359,6 +359,16 @@ ZASADA 3 - STRUKTURA (Pattern Interrupt):
 - SMS (max 160 znakow): intryguje, wywoluje cisnienie, ZERO sprzedawania. Tylko haczyk + pytanie o kontakt.
 - CALL (3-4 zdania, pierwsze 15 sekund decyduje): przelamuje schemat, uderza w konkretny blad + kwote straty, konczy pytaniem czy ma czas na 2 minuty/raport.
 - EMAIL (5 zdan): pierwszy kontakt to wartosc/audyt (co klient traci), NIE sprzedaz strony. Temat max 8 slow.
+
+PRZYKLAD ZLY (NIGDY tak nie pisz):
+"Dzien dobry, rozmawiam z wlascicielem HairFamily? Zauwazylismy, ze dla internetu praktycznie nie istniejecie - klienci szukaja Was w Google, znajduja salony obok i tam ida. To okolo 750 zlotych utraconej sprzedazy kazdego miesiaca. Czy ma Pan 2 minuty, zeby omowic konkretny plan?"
+(Powod: zaczyna od "Zauwazylismy, ze" - zakazana fraza)
+
+PRZYKLAD DOBRY (tak ma wygladac CALL):
+"Dzien dobry, czy rozmawiam z wlascicielem HairFamily? Dzwonie, bo robie przeglad salonow fryzjerskich w Warszawie i Wasz numer nie wyswietla sie w Google przy wyszukiwaniu - klienci trafiaja prosto do konkurencji obok. To realnie okolo 750 zlotych miesiecznie. Mam 2 minuty, zeby pokazac jak to odzyskac - ma Pan teraz chwile?"
+
+PRZYKLAD DOBRY (SMS):
+"Dzien dobry, Pana salon nie pojawia sie w Google przy wyszukiwaniu fryzjera w okolicy - to ok. 750 zl/mc dla konkurencji. Mam 2-minutowy raport co da sie z tym zrobic. Kiedy moge zadzwonic?"
 - FOLLOWUP1/FOLLOWUP2: krotkie, nie powtarzaj tej samej kwoty/argumentu co w SMS/call - dorzuc nowy detal lub inny kat (np. social proof, urgency).
 
 Format JSON: {"problem": "max 8 slow - nazwa killer flaw", "sms": "string", "call": "string", "email_temat": "string", "email_tresc": "string", "followup1": "string", "followup2": "string", "szansa": liczba_0_100}""",
