@@ -220,7 +220,7 @@ def claude_call(system_prompt, user_prompt, ak, max_tokens=800, model="claude-ha
             "system": system_prompt,
             "messages": [{"role": "user", "content": user_prompt}]
         },
-        timeout=30
+        timeout=90
     )
     r.raise_for_status()
     return r.json()["content"][0]["text"]
