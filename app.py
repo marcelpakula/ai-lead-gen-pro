@@ -54,8 +54,11 @@ hr { border: none; border-top: 1px solid #e2e8f0; margin: 1.2rem 0; }
 </style>
 """, unsafe_allow_html=True)
 
-SHEET_ID = "1-BUQR07uJmCOwWbk3gFiFywqqHtBDOUsa8hv6M9MAjs"
-SHEET_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=0"
+def get_sheet_config():
+    try:
+        return st.secrets["SHEETS_API_URL"], st.secrets["SHEETS_API_TOKEN"]
+    except:
+        return None, None
 
 def get_keys():
     try:
@@ -68,22 +71,22 @@ AK, SK = get_keys()
 WOJEWODZTWA = ["Dolnoslaskie","Kujawsko-Pomorskie","Lubelskie","Lubuskie","Lodzkie","Malopolskie","Mazowieckie","Opolskie","Podkarpackie","Podlaskie","Pomorskie","Slaskie","Swietokrzyskie","Warminsko-Mazurskie","Wielkopolskie","Zachodniopomorskie"]
 SIECIOWKI = ["mcdonald","kfc","burger king","biedronka","lidl","zabka","orlen","bp","shell","ikea","media markt","rossmann","douglas","reserved","h&m","zara","deichmann","pepco","action","neonet","decathlon","leroy merlin","castorama","obi ","jysk","empik"]
 
-def wczytaj_kody():
-    try:
-        df = pd.read_csv(SHEET_URL)
-        df.columns = df.columns.str.strip().str.lower()
-        return df
-    except:
-        return None
-
+# ── GOOGLE SHEETS (Apps Script Web App) — baza kodow z odczytem i zapisem ──
 def weryfikuj_kod(kod_input):
-    df = wczytaj_kody()
-    if df is None:
-        return False, "Blad polaczenia z baza kodow.", None
-    df_kod = df[df["kod"].astype(str).str.upper() == kod_input.upper()]
-    if df_kod.empty:
+    url, token = get_sheet_config()
+    if not url or not token:
+        return False, "Brak konfiguracji bazy kodow (SHEETS_API_URL/SHEETS_API_TOKEN).", None
+    try:
+        resp = requests.get(url, params={"token": token, "kod": kod_input.upper()}, timeout=15)
+        row = resp.json()
+    except Exception as e:
+        return False, f"Blad polaczenia z baza kodow: {str(e)[:120]}", None
+
+    if row.get("error") == "not_found":
         return False, "Nieprawidlowy kod dostepu.", None
-    row = df_kod.iloc[0]
+    if row.get("error"):
+        return False, f"Blad bazy kodow: {row.get('error')}", None
+
     if str(row.get("aktywny","")).upper() != "TAK":
         return False, "Ten kod zostal dezaktywowany.", None
     try:
@@ -92,11 +95,33 @@ def weryfikuj_kod(kod_input):
             return False, f"Kod wygasl {data_wygasniecia}.", None
     except:
         pass
-    skany_wykorzystane = int(row.get("skany_wykorzystane", 0))
-    max_skanow = int(row.get("max_skanow", 50))
+    skany_wykorzystane = int(row.get("skany_wykorzystane", 0) or 0)
+    max_skanow = int(row.get("max_skanow", 50) or 50)
     if skany_wykorzystane >= max_skanow:
         return False, f"Wykorzystales wszystkie skany ({max_skanow}/{max_skanow}).", None
-    return True, "OK", {"kod": str(row["kod"]), "skany_wykorzystane": skany_wykorzystane, "max_skanow": max_skanow, "pozostalo": max_skanow - skany_wykorzystane, "data_wygasniecia": str(row.get("data_wygasniecia", ""))}
+    return True, "OK", {
+        "kod": str(row["kod"]),
+        "wiersz": row["_row"],
+        "skany_wykorzystane": skany_wykorzystane,
+        "max_skanow": max_skanow,
+        "pozostalo": max_skanow - skany_wykorzystane,
+        "data_wygasniecia": str(row.get("data_wygasniecia", ""))
+    }
+
+def zapisz_skan(kod_info):
+    """Zwieksza licznik skanow w arkuszu o 1 — trwale, dla wszystkich sesji."""
+    url, token = get_sheet_config()
+    if not url or not token:
+        return False
+    try:
+        resp = requests.post(url, json={
+            "token": token,
+            "row": kod_info["wiersz"],
+            "value": kod_info["skany_wykorzystane"] + 1
+        }, timeout=15)
+        return resp.json().get("ok", False)
+    except Exception:
+        return False
 
 if "zalogowany" not in st.session_state: st.session_state.zalogowany = False
 if "kod_info" not in st.session_state: st.session_state.kod_info = None
@@ -523,6 +548,7 @@ if st.session_state.tryb_modulu == "B2B":
         elif sort == "Najmniej opinii": df = df.sort_values("Opinie", ascending=True)
         else: df = df.sort_values("Ocena strony", ascending=True)
         df = df.reset_index(drop=True)
+        zapisz_skan(st.session_state.kod_info)
         st.session_state.kod_info["skany_wykorzystane"] += 1; st.session_state.kod_info["pozostalo"] -= 1
         st.session_state.historia.append({"branza": branza, "lok": lok, "wyniki": len(df), "czas": datetime.now().strftime("%H:%M")})
         hot = len(df[df["Status"]=="HOT"]); warm = len(df[df["Status"]=="WARM"])
@@ -619,6 +645,7 @@ else:
         wyniki_ai = analiza_ai_b2c(produkt_b2c, problem_b2c, lok_b2c, grupa_b2c, dane, AK)
         bar_b2c.progress(95)
 
+        zapisz_skan(st.session_state.kod_info)
         st.session_state.kod_info["skany_wykorzystane"] += 1
         st.session_state.kod_info["pozostalo"] -= 1
         bar_b2c.progress(100); msg_b2c.empty(); bar_b2c.empty()
