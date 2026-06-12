@@ -356,6 +356,8 @@ def zbierz_dane_b2c(produkt, problem, lok, sk, msg_placeholder):
         produkt + " reviews trustpilot",
         produkt + " sklep online najlepszy",
         produkt + " aliexpress OR amazon",
+        produkt + " ranking najlepszych marek Polska",
+        produkt + " lider rynku Polska",
     ]:
         wynik = serper_search(q, sk, 5)
         for item in wynik.get("organic", []):
@@ -380,7 +382,7 @@ def zbierz_dane_b2c(produkt, problem, lok, sk, msg_placeholder):
 
     return dane
 
-def analiza_ai_b2c(produkt, problem, lok, grupa, dane, ak):
+def analiza_ai_b2c(produkt, problem, lok, grupa, budzet, dane, ak):
     FALLBACK = {
         "mapa_popytu": {"wielkosc": "Brak danych — dodaj klucz Anthropic API", "sezonowosc": "Brak danych", "slowa_kluczowe": ["brak"], "insight": "Dodaj klucz API w secrets"},
         "glos_klienta": {"glowny_bol": "Brak danych", "obawy": ["Dodaj klucz API"], "motywatory": ["Dodaj klucz API"], "cytaty": ["Dodaj klucz Anthropic API zeby zobaczyc analize"]},
@@ -400,6 +402,7 @@ def analiza_ai_b2c(produkt, problem, lok, grupa, dane, ak):
 PROBLEM KLIENTA: {problem}
 RYNEK: {lok}
 GRUPA: {grupa}
+BUDZET MIESIECZNY NA REKLAMY: {budzet}
 
 DANE Z INTERNETU (skrócone):
 {snippets_str}
@@ -441,7 +444,7 @@ Struktura JSON którą musisz zwrócić:
     "kanal_2_opis": "string",
     "kanal_3": "string",
     "kanal_3_opis": "string",
-    "budzet_start": "string"
+    "budzet_start": "string - jesli podano konkretny budzet miesieczny, podaj DOKLADNY podzial tego budzetu miedzy kanaly (kwoty w PLN), jesli 'Nie wiem / brak budzetu' zaproponuj realny budzet startowy"
   },
   "meta_ads": [
     {"wariant": "Wariant 1 - Bol", "headline": "max 40 znakow", "primary": "2-3 zdania", "cta": "string"},
@@ -657,6 +660,7 @@ else:
     with bc2:
         lok_b2c = st.text_input("Rynek docelowy", placeholder="np. Polska, Warszawa, cala Europa...")
         grupa_b2c = st.selectbox("Glowna grupa docelowa", ["Wszyscy","Kobiety 25-35","Kobiety 35-50","Mamy z dziecmi","Seniorzy 60+","Mezczyzni 25-45","Przedsiebiorcy","Studenci","Sportowcy"])
+        budzet_b2c = st.selectbox("Twoj miesieczny budzet na reklamy", ["Nie wiem / brak budzetu","Do 500 zl","500 - 1500 zl","1500 - 5000 zl","5000 - 15000 zl","Ponad 15000 zl"])
 
     st.markdown("<br>", unsafe_allow_html=True)
     _, bbc, _ = st.columns([1,2,1])
@@ -677,7 +681,7 @@ else:
         bar_b2c.progress(70)
 
         msg_b2c.info("Claude AI syntetyzuje dane i tworzy strategie...")
-        wyniki_ai = analiza_ai_b2c(produkt_b2c, problem_b2c, lok_b2c, grupa_b2c, dane, AK)
+        wyniki_ai = analiza_ai_b2c(produkt_b2c, problem_b2c, lok_b2c, grupa_b2c, budzet_b2c, dane, AK)
         bar_b2c.progress(95)
 
         zapisz_skan(st.session_state.kod_info)
