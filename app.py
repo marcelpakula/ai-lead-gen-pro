@@ -705,6 +705,9 @@ if st.session_state.tryb_modulu == "B2B":
         k4.markdown('<div class="kpi-card"><div class="kpi-val kpi-val-red">' + str(bez_www) + '</div><div class="kpi-label">Bez WWW</div></div>', unsafe_allow_html=True)
         k5.markdown('<div class="kpi-card"><div class="kpi-val kpi-val-purple">' + str(sr_score) + '</div><div class="kpi-label">Sr Score</div></div>', unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
+        strata_total = int(df["Strata/mc (PLN)"].sum())
+        st.markdown(f'<div class="warning-box" style="text-align:center;padding:1.2rem"><div style="font-size:.85rem;color:#92400e;font-weight:600;text-transform:uppercase;letter-spacing:.05em">💸 Calkowita potencjalna strata tych firm</div><div style="font-size:2.2rem;font-weight:800;color:#b45309;margin:.3rem 0">{strata_total:,} PLN / miesiac</div><div style="font-size:.85rem;color:#92400e">To realny pieniadz, ktory ten rynek traci kazdy miesiac przez braki na stronach WWW - i Twoj argument numer 1 w kazdej rozmowie.</div></div>'.replace(",", " "), unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
         tab1,tab2,tab3,tab4,tab5,tab6 = st.tabs(["Tabela wynikow","SMS / Cold Call","Sekwencja Email","TOP 5","Analiza","Eksport"])
         with tab1:
             st.dataframe(df[["Status","Nazwa","Telefon","WWW","Opinie","Ocena Google","Ocena strony","SSL","Rezerwacja","AI Score","Strata/mc (PLN)","Szansa %","Problem","Problemy WWW"]], use_container_width=True, hide_index=True, column_config={"AI Score": st.column_config.ProgressColumn("AI Score", min_value=0, max_value=99, format="%d/99"), "Ocena strony": st.column_config.ProgressColumn("Ocena strony", min_value=0, max_value=10, format="%d/10"), "Strata/mc (PLN)": st.column_config.NumberColumn("Strata/mc (PLN)", format="%d zl"), "Szansa %": st.column_config.ProgressColumn("Szansa %", min_value=0, max_value=100, format="%d%%")})
