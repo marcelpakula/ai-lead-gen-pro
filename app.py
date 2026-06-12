@@ -154,24 +154,59 @@ pozostalo = info["pozostalo"]
 
 # ── HELPER: bezpieczny parser JSON ──
 def safe_parse_json(text):
-    """Wyciąga JSON z tekstu nawet jeśli Claude dodał komentarz przed/po."""
+    """Wyciąga JSON z tekstu nawet jeśli Claude dodał komentarz przed/po albo odpowiedź zostala ucieta."""
+    import re
     text = text.strip()
-    # Szukaj pierwszego { i ostatniego }
     start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end == -1 or end <= start:
+    if start == -1:
         return None
-    candidate = text[start:end+1]
+    end = text.rfind("}")
+    candidate = text[start:end+1] if end > start else text[start:]
     try:
         return json.loads(candidate)
     except:
-        # Próba naprawy — usuń znaki kontrolne
-        import re
-        candidate_clean = re.sub(r'[\x00-\x1f\x7f]', ' ', candidate)
-        try:
-            return json.loads(candidate_clean)
-        except:
-            return None
+        pass
+
+    # Próba naprawy — usuń znaki kontrolne
+    candidate_clean = re.sub(r'[\x00-\x1f\x7f]', ' ', candidate)
+    try:
+        return json.loads(candidate_clean)
+    except:
+        pass
+
+    # Próba naprawy uciętego JSON-a: obetnij do ostatniego bezpiecznego przecinka
+    # poza stringami i dodomknij wszystkie otwarte nawiasy
+    raw = text[start:]
+    stack = []
+    in_str = False
+    esc = False
+    last_safe = -1
+    for i, ch in enumerate(raw):
+        if esc:
+            esc = False
+            continue
+        if ch == '\\' and in_str:
+            esc = True
+            continue
+        if ch == '"':
+            in_str = not in_str
+            continue
+        if in_str:
+            continue
+        if ch in '{[':
+            stack.append(ch)
+        elif ch in '}]':
+            if stack: stack.pop()
+        if ch == ',':
+            last_safe = i
+
+    if not stack or last_safe == -1:
+        return None
+    repaired = raw[:last_safe] + ''.join('}' if c == '{' else ']' for c in reversed(stack))
+    try:
+        return json.loads(repaired)
+    except:
+        return None
 
 # ── HELPER: wywołanie Claude z systemowym promptem ──
 def claude_call(system_prompt, user_prompt, ak, max_tokens=800):
@@ -415,7 +450,7 @@ Struktura JSON którą musisz zwrócić:
   ]
 }"""
 
-        tekst = claude_call(system_prompt, user_prompt, ak, 4000)
+        tekst = claude_call(system_prompt, user_prompt, ak, 8000)
         wynik = safe_parse_json(tekst)
         if wynik is None:
             FALLBACK["mapa_popytu"]["insight"] = "Blad parsowania JSON. Sprobuj ponownie."
