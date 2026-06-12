@@ -451,15 +451,8 @@ Struktura JSON którą musisz zwrócić:
     {"wariant": "Wariant 1 - Bol", "headline": "max 40 znakow", "primary": "2-3 zdania", "cta": "string"},
     {"wariant": "Wariant 2 - Rozwiazanie", "headline": "max 40 znakow", "primary": "2-3 zdania", "cta": "string"},
     {"wariant": "Wariant 3 - Dowod spoleczny", "headline": "max 40 znakow", "primary": "2-3 zdania", "cta": "string"}
-  ],
-  "video_scenariusze": [
-    {"tytul": "string - krotka nazwa scenariusza", "hook": "string - pierwsze 3 sekundy, mocny hak przerywajacy scrollowanie", "problem": "string - przedstawienie problemu klienta w jezyku naturalnym, storytelling", "rozwiazanie": "string - jak produkt rozwiazuje ten problem, narracyjnie", "produkt": "string - pokazanie produktu i jego kluczowych cech/zalet", "cta": "string - wezwanie do akcji"},
-    {"tytul": "string", "hook": "string", "problem": "string", "rozwiazanie": "string", "produkt": "string", "cta": "string"},
-    {"tytul": "string", "hook": "string", "problem": "string", "rozwiazanie": "string", "produkt": "string", "cta": "string"}
   ]
-}
-
-Sekcja "video_scenariusze" to 3 rozne scenariusze na natywne, storytellingowe filmy reklamowe do Meta Ads (Reels/TikTok). Kazdy scenariusz musi miec strukture: hook (3 sek, zatrzymuje scroll) -> problem (storytelling, emocje klienta) -> rozwiazanie (jak produkt to rozwiazuje) -> produkt (cechy, demo) -> cta. Pisz konwersacyjnie, jak influencer, nie jak reklama korporacyjna."""
+}"""
 
         tekst = claude_call(system_prompt, user_prompt, ak, 8000)
         wynik = safe_parse_json(tekst)
@@ -471,6 +464,30 @@ Sekcja "video_scenariusze" to 3 rozne scenariusze na natywne, storytellingowe fi
         for k, v in FALLBACK.items():
             if k not in wynik:
                 wynik[k] = v
+
+        # Drugie, oddzielne wywolanie - scenariusze video (zeby nie obciazac glownego JSON-a)
+        try:
+            video_system_prompt = """Jesteś ekspertem od scenariuszy do reklam video na Meta Ads (Reels/TikTok). Odpowiadasz WYŁĄCZNIE czystym JSON — zero tekstu przed ani po, zero markdown.
+
+Struktura JSON:
+{
+  "video_scenariusze": [
+    {"tytul": "string - krotka nazwa scenariusza", "hook": "string - pierwsze 3 sekundy, mocny hak przerywajacy scrollowanie", "problem": "string - przedstawienie problemu klienta w jezyku naturalnym, storytelling", "rozwiazanie": "string - jak produkt rozwiazuje ten problem, narracyjnie", "produkt": "string - pokazanie produktu i jego kluczowych cech/zalet", "cta": "string - wezwanie do akcji"},
+    {"tytul": "string", "hook": "string", "problem": "string", "rozwiazanie": "string", "produkt": "string", "cta": "string"},
+    {"tytul": "string", "hook": "string", "problem": "string", "rozwiazanie": "string", "produkt": "string", "cta": "string"}
+  ]
+}
+
+3 rozne scenariusze na natywne, storytellingowe filmy reklamowe. Kazdy scenariusz musi miec strukture: hook (3 sek, zatrzymuje scroll) -> problem (storytelling, emocje klienta) -> rozwiazanie (jak produkt to rozwiazuje) -> produkt (cechy, demo) -> cta. Pisz konwersacyjnie, jak influencer, nie jak reklama korporacyjna."""
+
+            video_tekst = claude_call(video_system_prompt, user_prompt, ak, 3000)
+            video_wynik = safe_parse_json(video_tekst)
+            if video_wynik and "video_scenariusze" in video_wynik:
+                wynik["video_scenariusze"] = video_wynik["video_scenariusze"]
+            else:
+                wynik["video_scenariusze"] = FALLBACK["video_scenariusze"]
+        except Exception:
+            wynik["video_scenariusze"] = FALLBACK["video_scenariusze"]
 
         return wynik
     except Exception as e:
