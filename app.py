@@ -310,12 +310,14 @@ def oblicz_strate_finansowa(f, wer, branza=""):
             break
 
     if f["www"] in ["brak","sprawdz na stronie",""]:
-        utraceni_klienci = 5  # brak strony = realna utracona widocznosc w Google
+        utraceni_klienci = 4 + (f["opinie"] % 5)  # 4-8, zmienne w zaleznosci od firmy
     else:
         utraceni_klienci = max(1, len(wer["problemy"]))
         if not wer["ma_rezerwacje"]: utraceni_klienci += 1
+        utraceni_klienci += f["opinie"] % 3  # +0-2, zmienne w zaleznosci od firmy
 
-    return utraceni_klienci * wartosc_klienta
+    strata = utraceni_klienci * wartosc_klienta
+    return max(50, round(strata / 50) * 50)  # zaokraglenie do pelnych 50 zl
 
 def status_leada(score):
     if score >= 80: return "HOT"
@@ -327,6 +329,14 @@ def analiza_claude_b2b(f, branza, ak, wer, score, strata=0, lok=""):
     if not ak: return FALLBACK
     try:
         prob_str = ", ".join(wer["problemy"]) if wer["problemy"] else "brak problemow"
+        STYLE_OTWARCIA = [
+            "od razu konkretna obserwacja/liczba, bez pytania o wlasciciela - np. 'X opinii a strona...'",
+            "pytanie retoryczne dotyczace konkretnego problemu, np. 'Wie Pan ile osob dzisiaj zrezygnowalo, bo...'",
+            "krotkie przedstawienie sie z imienia + jedno zdanie o konkretnym bledzie, bez 'czy rozmawiam z...'",
+            "nawiazanie do konkurencji w okolicy jako punkt wyjscia, bez pytania o wlasciciela",
+            "formalne 'Dzien dobry, czy rozmawiam z wlascicielem/wlascicielka [niszy]?' - UZYJ TEGO STYLU TYLKO TERAZ, w innych przypadkach unikaj go",
+        ]
+        styl_otwarcia = STYLE_OTWARCIA[hash(f["nazwa"] + f["telefon"]) % len(STYLE_OTWARCIA)]
         user_prompt = f"""NAZWA FIRMY: {f["nazwa"]}
 NISZA/BRANZA: {branza}
 MIASTO/LOKALIZACJA: {lok}
@@ -335,6 +345,7 @@ LICZBA OPINII GOOGLE: {f["opinie"]}
 OCENA GOOGLE: {f["ocena"]}
 WYKRYTE BLEDY (killer flaws): {prob_str}
 SZACOWANA UTRACONA SPRZEDAZ: {strata} PLN miesiecznie (wyliczona na bazie wartosci typowego klienta w tej niszy)
+STYL OTWARCIA (uzyj tego dla SMS i CALL): {styl_otwarcia}
 
 Wygeneruj komunikaty wedlug systemu opisanego w instrukcjach. Zwroc JSON z polami: problem, sms, call, email_temat, email_tresc, followup1, followup2, szansa"""
 
@@ -354,6 +365,8 @@ ZASADA 2 - KILLER FLAW: Zamiast ogolnikow, uderz w KONKRETNY wykryty blad:
 - Brak mobile -> "Strona rozjezdza sie na telefonach, 70% ludzi ucieka po 2 sekundach"
 - Brak WWW -> "Konkurencja zjada klientow, ktorzy szukali Was w Google w tym miesiacu - dla internetu nie istniejecie"
 - Brak rezerwacji online -> "Klienci uciekaja do konkurencji, bo nie moga zapisac sie online o 23:00"
+
+ZASADA 3.5 - ROZNORODNOSC OTWARCIA: To wiadomosc jedna z wielu wyslanych masowo - NIE moze brzmiec jak szablon. Otwarcie SMS i CALL MUSI byc zgodne ze wskazanym w danych "STYL OTWARCIA" (rozne dla kazdej firmy). NIE uzywaj schematu "Dzien dobry, czy rozmawiam z wlascicielem X? Dzwonie, bo..." jesli STYL OTWARCIA wskazuje inaczej.
 
 ZASADA 3 - STRUKTURA (Pattern Interrupt):
 - SMS (max 160 znakow): intryguje, wywoluje cisnienie, ZERO sprzedawania. Tylko haczyk + pytanie o kontakt.
