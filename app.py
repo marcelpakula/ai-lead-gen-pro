@@ -870,6 +870,10 @@ if st.session_state.tryb_modulu == "B2B":
         zapisz_skan(st.session_state.kod_info)
         st.session_state.kod_info["skany_wykorzystane"] += 1; st.session_state.kod_info["pozostalo"] -= 1
         st.session_state.historia.append({"branza": branza, "lok": lok, "wyniki": len(df), "czas": datetime.now().strftime("%H:%M")})
+        st.session_state["b2b_df"] = df; st.session_state["b2b_branza"] = branza; st.session_state["b2b_lok"] = lok
+
+    if "b2b_df" in st.session_state:
+        df = st.session_state["b2b_df"]; branza = st.session_state["b2b_branza"]; lok = st.session_state["b2b_lok"]
         hot = len(df[df["Status"]=="HOT"]); warm = len(df[df["Status"]=="WARM"])
         bez_www = len(df[df["WWW"].isin(["brak","sprawdz na stronie",""])]); sr_score = int(df["AI Score"].mean())
         st.success("Znaleziono " + str(len(df)) + " firm | " + branza + " | " + lok)
