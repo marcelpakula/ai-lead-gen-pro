@@ -420,7 +420,7 @@ def analiza_claude_b2b(f, branza, ak, wer, score, strata=0, lok="", opinie_tekst
         STYLE_OTWARCIA = [
             "od razu konkretna obserwacja/liczba, bez pytania o wlasciciela - np. 'X opinii a strona...'",
             "pytanie retoryczne dotyczace konkretnego problemu, np. 'Wie Pan ile osob dzisiaj zrezygnowalo, bo...'",
-            "krotkie przedstawienie sie z imienia + jedno zdanie o konkretnym bledzie, bez 'czy rozmawiam z...'",
+            "krotkie przedstawienie sie z imienia w naturalnej polskiej formie (np. 'Dzien dobry, z tej strony [Imie], dzwonie/pisze w sprawie...') + jedno zdanie o konkretnym bledzie, bez 'czy rozmawiam z...' i bez kalek z angielskiego typu 'tutaj'/'mowi sie'",
             "nawiazanie do konkurencji w okolicy jako punkt wyjscia, bez pytania o wlasciciela",
             "formalne 'Dzien dobry, czy rozmawiam z wlascicielem/wlascicielka [niszy]?' - UZYJ TEGO STYLU TYLKO TERAZ, w innych przypadkach unikaj go",
         ]
@@ -474,7 +474,7 @@ ZASADA 3 - STRUKTURA (Pattern Interrupt):
 - CALL (3-4 zdania, pierwsze 15 sekund decyduje): przelamuje schemat, uderza w konkretny blad + kwote straty, konczy pytaniem czy ma czas na 2 minuty/raport.
 - EMAIL (5 zdan): pierwszy kontakt to wartosc/audyt (co klient traci), NIE sprzedaz strony. Temat max 8 slow.
 
-ZASADA 4 - JEZYK MUSI BYC 100% POPRAWNY I GOTOWY DO WYSLANIA: Tekst musi byc bezbledny pod wzgledem ortografii, gramatyki i odmiany (przypadki, liczby, rodzaje) - to wiadomosc, ktora handlowiec wysyla "as-is" bez korekty. Zero wymyslonych/nieistniejacych slow (np. "konkwencja"), zero nazw firm spoza danych wejsciowych. Pisz prostym, naturalnym jezykiem polskim, jakby pisal to czlowiek, nie tlumacz maszynowy. Przed odpowiedzia w mysli sprawdz kazde zdanie pod wzgledem poprawnosci jezykowej.
+ZASADA 4 - JEZYK MUSI BYC 100% POPRAWNY, NATURALNY I GOTOWY DO WYSLANIA: Unikaj kalek z angielskiego typu "Katarzyna tutaj", "mowi sie Katarzyna", "to jest Katarzyna z..." - po polsku przedstawiamy sie "z tej strony Katarzyna" albo po prostu "Dzien dobry, Katarzyna, dzwonie w sprawie...". Tekst musi byc bezbledny pod wzgledem ortografii, gramatyki i odmiany (przypadki, liczby, rodzaje) - to wiadomosc, ktora handlowiec wysyla "as-is" bez korekty. Zero wymyslonych/nieistniejacych slow (np. "konkwencja"), zero nazw firm spoza danych wejsciowych. Pisz prostym, naturalnym jezykiem polskim, jakby pisal to czlowiek, nie tlumacz maszynowy. Przed odpowiedzia w mysli sprawdz kazde zdanie pod wzgledem poprawnosci jezykowej.
 
 ZASADA 4.5 - ZAKONCZENIE/CTA: KAZDA wiadomosc (SMS i CALL) musi konczyc sie zgodnie ze wskazanym "STYL ZAKONCZENIA/CTA" - NIE powtarzaj w kolko schematu "Mam X-minutowy raport/konkretny plan, kiedy moge zadzwonic?" we wszystkich wiadomosciach, bo to brzmi jak bot wysylajacy ten sam szablon do wszystkich. Rozne firmy = rozne zakonczenia.
 
