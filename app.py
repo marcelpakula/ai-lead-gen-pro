@@ -946,6 +946,8 @@ if st.session_state.tryb_modulu == "B2B":
 
     if "b2b_df" in st.session_state:
         df = st.session_state["b2b_df"]; branza = st.session_state["b2b_branza"]; lok = st.session_state["b2b_lok"]
+        if "etapy_kontaktu" not in st.session_state: st.session_state["etapy_kontaktu"] = {}
+        df["Etap kontaktu"] = df["Telefon"].map(lambda t: st.session_state["etapy_kontaktu"].get(t, "Nowy"))
         hot = len(df[df["Status"]=="HOT"]); warm = len(df[df["Status"]=="WARM"])
         bez_www = len(df[df["WWW"].isin(["brak","sprawdz na stronie",""])]); sr_score = int(df["AI Score"].mean())
         st.success("Znaleziono " + str(len(df)) + " firm | " + branza + " | " + lok)
@@ -962,7 +964,19 @@ if st.session_state.tryb_modulu == "B2B":
         st.markdown("<br>", unsafe_allow_html=True)
         tab1,tab2,tab3,tab4,tab5,tab6 = st.tabs(["Tabela wynikow","SMS / Cold Call","Sekwencja Email","TOP 5","Analiza","Eksport"])
         with tab1:
-            st.dataframe(df[["Status","Nazwa","Telefon","AI Score","Strata/mc (PLN)"]], use_container_width=True, hide_index=True, column_config={"AI Score": st.column_config.ProgressColumn("AI Score", min_value=0, max_value=99, format="%d/99"), "Strata/mc (PLN)": st.column_config.NumberColumn("Strata/mc (PLN)", format="%d zl")})
+            st.caption("✏️ Kolumnę 'Etap kontaktu' można edytować — zapisuje się automatycznie i jest pamiętana między skanami (po numerze telefonu).")
+            edited = st.data_editor(
+                df[["Status","Nazwa","Telefon","AI Score","Strata/mc (PLN)","Etap kontaktu"]],
+                use_container_width=True, hide_index=True, key="tab1_editor",
+                column_config={
+                    "AI Score": st.column_config.ProgressColumn("AI Score", min_value=0, max_value=99, format="%d/99"),
+                    "Strata/mc (PLN)": st.column_config.NumberColumn("Strata/mc (PLN)", format="%d zl"),
+                    "Etap kontaktu": st.column_config.SelectboxColumn("Etap kontaktu", options=["Nowy","Skontaktowano","Odpowiedział","Umówiono","Zamkniete","Odmowa"], required=True),
+                },
+                disabled=["Status","Nazwa","Telefon","AI Score","Strata/mc (PLN)"],
+            )
+            for _, r in edited.iterrows():
+                st.session_state["etapy_kontaktu"][r["Telefon"]] = r["Etap kontaktu"]
             with st.expander("📈 Szansa i diagnoza problemu"):
                 st.dataframe(df[["Nazwa","WWW","Szansa %","Problem"]], use_container_width=True, hide_index=True, column_config={"Szansa %": st.column_config.ProgressColumn("Szansa %", min_value=0, max_value=100, format="%d%%")})
             with st.expander("🔍 Szczegoly techniczne (CMS, piksele, SSL, rezerwacje...)"):
