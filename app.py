@@ -3,7 +3,6 @@ import pandas as pd
 import requests
 import json
 import re
-import sqlite3
 from datetime import datetime, date
 
 st.set_page_config(page_title="AI Lead Gen PRO", layout="wide", page_icon="🔥")
@@ -124,23 +123,6 @@ def zapisz_skan(kod_info):
         return resp.json().get("ok", False)
     except Exception:
         return False
-
-# ── BAZA DANYCH (SQLite) — trwale etapy kontaktu z leadami ──
-def _db():
-    conn = sqlite3.connect("leady_crm.db")
-    conn.execute("CREATE TABLE IF NOT EXISTS etapy_kontaktu (kod TEXT, telefon TEXT, etap TEXT, PRIMARY KEY (kod, telefon))")
-    return conn
-
-def wczytaj_etapy(kod):
-    """Zwraca slownik {telefon: etap} dla danego kodu dostepu."""
-    with _db() as conn:
-        return dict(conn.execute("SELECT telefon, etap FROM etapy_kontaktu WHERE kod = ?", (kod,)).fetchall())
-
-def zapisz_etap(kod, telefon, etap):
-    """Trwale zapisuje/aktualizuje etap kontaktu dla leada (po telefonie) w ramach danego kodu dostepu."""
-    with _db() as conn:
-        conn.execute("INSERT INTO etapy_kontaktu (kod, telefon, etap) VALUES (?,?,?) ON CONFLICT(kod, telefon) DO UPDATE SET etap = excluded.etap", (kod, telefon, etap))
-        conn.commit()
 
 if "zalogowany" not in st.session_state: st.session_state.zalogowany = False
 if "kod_info" not in st.session_state: st.session_state.kod_info = None
@@ -964,8 +946,8 @@ if st.session_state.tryb_modulu == "B2B":
 
     if "b2b_df" in st.session_state:
         df = st.session_state["b2b_df"]; branza = st.session_state["b2b_branza"]; lok = st.session_state["b2b_lok"]
-        etapy_zapisane = wczytaj_etapy(st.session_state.kod_info["kod"])
-        df["Etap kontaktu"] = df["Telefon"].map(lambda t: etapy_zapisane.get(t, "Nowy"))
+        if "etapy_kontaktu" not in st.session_state: st.session_state["etapy_kontaktu"] = {}
+        df["Etap kontaktu"] = df["Telefon"].map(lambda t: st.session_state["etapy_kontaktu"].get(t, "Nowy"))
         hot = len(df[df["Status"]=="HOT"]); warm = len(df[df["Status"]=="WARM"])
         bez_www = len(df[df["WWW"].isin(["brak","sprawdz na stronie",""])]); sr_score = int(df["AI Score"].mean())
         st.success("Znaleziono " + str(len(df)) + " firm | " + branza + " | " + lok)
@@ -994,8 +976,7 @@ if st.session_state.tryb_modulu == "B2B":
                 disabled=["Status","Nazwa","Telefon","AI Score","Strata/mc (PLN)"],
             )
             for _, r in edited.iterrows():
-                if r["Etap kontaktu"] != etapy_zapisane.get(r["Telefon"], "Nowy"):
-                    zapisz_etap(st.session_state.kod_info["kod"], r["Telefon"], r["Etap kontaktu"])
+                st.session_state["etapy_kontaktu"][r["Telefon"]] = r["Etap kontaktu"]
             with st.expander("📈 Szansa i diagnoza problemu"):
                 st.dataframe(df[["Nazwa","WWW","Szansa %","Problem"]], use_container_width=True, hide_index=True, column_config={"Szansa %": st.column_config.ProgressColumn("Szansa %", min_value=0, max_value=100, format="%d%%")})
             with st.expander("🔍 Szczegoly techniczne (CMS, piksele, SSL, rezerwacje...)"):
