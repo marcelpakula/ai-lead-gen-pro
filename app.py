@@ -581,6 +581,7 @@ WYMAGANIA JAKOSCIOWE (kluczowe - to ma byc NA NAJWYZSZYM POZIOMIE, nie szablon):
 - Sekcja kontakt z PRAWDZIWYMI danymi (adres, telefon, email) + wyraznie CTA zgodne z "GLOWNY CEL STRONY".
 - Zastosuj podany STYL WIZUALNY i KOLOR DOMINUJACY konsekwentnie w calej stronie (tla, akcenty, przyciski).
 - Jesli podano DODATKOWE SEKCJE (np. galeria, FAQ, cennik, mapa, before/after, certyfikaty) - dodaj je estetycznie, dopasowane do branzy.
+- NAWIGACJA MUSI DZIALAC: kazdy link w menu (<a href="#cos">) musi odpowiadac istniejacemu elementowi z atrybutem id="cos" w odpowiedniej sekcji (np. <section id="cennik">). Sprawdz, ze WSZYSTKIE linki w nav maja swoj odpowiednik id w dokumencie - to jest mockup jednostronicowy (one-page), wiec nawigacja to plynne przewijanie do sekcji.
 - Zdjecia: uzyj placeholderow https://picsum.photos/seed/{losowy-tekst}/{szerokosc}/{wysokosc} (rozne seedy).
 - Pod hero dodaj dyskretny banner: "PODGLAD / MOCKUP - przykladowa wizualizacja nowej strony" w jasnym kolorze.
 - NIE wymyslaj innych danych kontaktowych niz podane. NIE generuj generycznego, "plastikowego" designu - to ma wyglądać jak praca topowego studia.
