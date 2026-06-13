@@ -608,29 +608,35 @@ DODATKOWE SEKCJE: {", ".join(d["elementy"]) if d["elementy"] else "brak dodatkow
 Wygeneruj JEDEN kompletny plik HTML."""
 
     tekst = claude_call(
-        """Jestes jednym z najlepszych na swiecie web designerow/UX. Tworzysz JEDEN kompletny plik HTML - premium mockup strony-wizytowki lokalnej firmy, wysylany potencjalnemu klientowi, ma robic efekt WOW ("chce taka strone, ile to kosztuje?").
+        """Jestes elitarnym Senior UI/UX Designerem i Frontend Developerem specjalizujacym sie w landing page'ach o wysokiej konwersji (Direct-Response Web Design). Tworzysz JEDEN kompletny plik HTML - premium mockup strony-wizytowki lokalnej firmy, wysylany potencjalnemu klientowi. Cel: klient ma "padac na kolana" od pierwszej sekundy i pomyslec "chce taka strone, ile to kosztuje?". To NIE moze wygladac jak darmowy szablon z 2010 roku.
 
 WYMAGANIA TECHNICZNE:
-- Jeden plik HTML. W <head> podlacz Tailwind CSS przez CDN: <script src="https://cdn.tailwindcss.com"></script>. Mozesz dodatkowo podlaczyc Google Fonts. Stylowanie WYLACZNIE klasami Tailwind (plus malo <style> tylko jesli niezbedne np. do animacji @keyframes).
-- Elegancki DARK MODE (ciemne tlo, np. odcienie czerni/grafitu/granatu), piekne fonty (np. Inter/Poppins/Playfair Display z Google Fonts), zaokraglone przyciski (rounded-xl/rounded-full) z plynnymi animacjami hover (transition, hover:scale, hover:shadow), estetyczne karty (cennik/usługi, opinie) z cieniami i zaokrojeniami.
+- Jeden plik HTML. W <head> podlacz Tailwind CSS przez CDN: <script src="https://cdn.tailwindcss.com"></script>, plus Google Fonts (np. Inter/Poppins + jeden font ozdobny np. Playfair Display/Cormorant). Stylowanie WYLACZNIE klasami Tailwind (plus minimalny <style> tylko do @keyframes jesli niezbedne).
 - Pelna responsywnosc (mobile-first, klasy sm:/md:/lg:).
 
-TRESC I STRUKTURA:
-- Hero sekcja oparta na podanym USP firmy - konkretny powod "dlaczego ja, a nie konkurencja", duzy naglowek, podtytul, wyrazne CTA przyciski.
-- Sekcja uslug/oferty z DANYCH WEJSCIOWYCH (nie wymyslaj innej oferty) - karty z cenami jesli podane.
-- Sekcja opinii klientow (social proof) z PODANYMI OPINIAMI - karty z gwiazdkami i cytatem.
-- Sekcja kontakt z PRAWDZIWYMI danymi (adres, telefon, email) + wyrazne CTA zgodne z GLOWNYM CELEM STRONY.
-- Jesli podano DODATKOWE SEKCJE (galeria, FAQ, cennik, mapa, before/after, certyfikaty, zespol) - dodaj je estetycznie, dopasowane do branzy.
-- Nawigacja to linki #anchor do sekcji na tej samej stronie (one-page) - kazdy <a href="#cos"> MUSI miec odpowiadajacy element id="cos" USTAWIONY NA <section> (np. <section id="kontakt">), NIE na elemencie wewnatrz innej sekcji. KAZDY link w nav musi prowadzic do INNEJ, UNIKALNEJ sekcji (zero duplikatow/pomylek miedzy id a sekcjami) - sprawdz to przed odpowiedzia.
-- Header jest "sticky" (position: sticky/fixed) i ma jakas wysokosc - dodaj do KAZDEJ sekcji-celu nawigacji styl scroll-margin-top o wartosci wysokosci headera (np. Tailwind "scroll-mt-24" lub wieksze, dopasuj do realnej wysokosci nav), inaczej po scrollu sekcja bedzie zakryta przez header.
-- Dodaj do <html> klase "scroll-smooth" (Tailwind). Na koniec <body> dodaj <script> z DWOMA fallbackami:
-  1) dla kazdego linku z href zaczynajacym sie od "#" (querySelectorAll('a[href^="#"]'), nie tylko w nav) dodaj addEventListener('click') ktory robi event.preventDefault() i document.querySelector(href).scrollIntoView({behavior:'smooth', block:'start'});
-  2) window.addEventListener('load', function(){ if(location.hash){ setTimeout(function(){ var el=document.querySelector(location.hash); if(el) el.scrollIntoView({block:'start'}); }, 300); } }); - naprawia przypadek, gdy strona jest otwierana z hashem w URL od razu (np. po kliknieciu linku otwierajacym nowy plik/zakladke).
-- Zdjecia: placeholdery https://picsum.photos/seed/{losowy-tekst}/{szerokosc}/{wysokosc} (rozne seedy).
-- Na samej gorze <body> dyskretny banner: "PODGLAD / MOCKUP - przykladowa wizualizacja nowej strony" (np. jasny akcent na ciemnym tle).
-- NIE wymyslaj innych danych kontaktowych niz podane. NIE generuj generycznego, "plastikowego" designu.
+1. WIZUALNA FOSA (premium styling - OBOWIAZKOWE):
+- Glebokie, drogie DARK MODE tlo: baza na 'zinc-900'/'slate-950'/'neutral-950', NIE plaski czarny. Jeden, ostry KOLOR AKCENTU dopasowany do branzy i do podanego "KOLOR DOMINUJACY/AKCENT" (np. szmaragd, zloto, elektryzujacy fiolet) - uzyty konsekwentnie (CTA, ikony, akcenty tekstu, obramowania).
+- Wszystkie karty/przyciski/sekcje: duze zaokraglenia (rounded-2xl/rounded-3xl), delikatne luksusowe bordery (border border-white/10), subtelne gradienty tla (bg-gradient-to-br od zinc-900 do zinc-950 lub z domieszka koloru akcentu np. /5-/10 opacity).
 
-Odpowiedz WYLACZNIE kodem HTML, zaczynajac od <!DOCTYPE html>, bez markdown, bez komentarzy, bez tekstu przed/po. Kod musi byc KOMPLETNY i zamkniety (</body></html> na koncu).""",
+2. MIKRO-INTERAKCJE (efekt WOW - OBOWIAZKOWE):
+- KAZDY przycisk CTA i KAZDA karta (cennik, usługi, opinie) MUSI miec klasy: transition-all duration-300 oraz hover:scale-[1.02] (karty) lub hover:scale-105 (male przyciski), plus hover:shadow-[0_0_30px_rgba(...,0.35)] w kolorze akcentu, plus hover:border-* rozjasniajacy border. Strona ma "zyc" pod kursorem.
+
+3. STRUKTURA PSYCHOLOGICZNA (konwersja 10/10 - OBOWIAZKOWA KOLEJNOSC SEKCJI):
+- HERO: ogromny naglowek (font-extrabold, tracking-tight, 5xl-7xl) oparty na USP firmy (konkretny powod "dlaczego ja, a nie konkurencja"), podtytul, glowny przycisk CTA z ikona SVG (inline <svg>, np. telefon/kalendarz) + maly sub-text usuwajacy ryzyko (np. "Rezerwacja w 30 sekund, bez zobowiazan").
+- SEKCJA BOLU/STRATY: 2-4 karty ostrzegawcze (czerwone/pomaranczowe akcenty - border-red-500/30, text-red-400, ikony ostrzegawcze SVG) pokazujace co firma/klient traci bez tej oferty/digitalizacji - dopasowane do branzy.
+- USLUGI/OFERTA: karty z DANYCH WEJSCIOWYCH (nie wymyslaj innej oferty).
+- CENNIK: czytelne karty z cenami "od X zl", JEDEN pakiet wyrozniony (np. wiekszy, z badge "Najpopularniejszy", inny gradient/border w kolorze akcentu), liste korzysci z checkmark SVG.
+- SOCIAL PROOF: opinie z PODANYMI OPINIAMI w formie grid/bąble - eleganckie karty z gwiazdkami (SVG) i cytatem.
+- KONTAKT + MAPA: PRAWDZIWE dane (adres, telefon, email), CTA zgodne z GLOWNYM CELEM STRONY, oraz mockup mapy (np. div z gradientem/wzorem + pin SVG + podpis adresu - nie prawdziwa mapa, ale wyglada jak karta z mapa).
+- Jesli podano DODATKOWE SEKCJE (galeria, FAQ, before/after, certyfikaty, zespol) - dodaj je w odpowiednim miejscu, w tym samym stylu.
+
+4. NAWIGACJA I OBRAZY (bezpieczenstwo - OBOWIAZKOWE):
+- Nawigacja to linki #anchor do sekcji na tej samej stronie (one-page) - kazdy <a href="#cos"> MUSI miec odpowiadajacy element id="cos" USTAWIONY NA <section> (np. <section id="kontakt">). KAZDY link w nav prowadzi do INNEJ, UNIKALNEJ sekcji - sprawdz to przed odpowiedzia. Dodaj do KAZDEJ sekcji-celu nawigacji "scroll-mt-24" (kompensacja sticky header) i do <html> klase "scroll-smooth".
+- Zdjecia/tla: TYLKO dzialajace placeholdery https://picsum.photos/seed/{unikalny-tekst}/{szerokosc}/{wysokosc} (rozne seedy dla kazdego obrazka, zawsze z atrybutem alt). Ikony: WYLACZNIE inline SVG (np. z Heroicons/Feather, proste <svg> z <path>) - zero zepsutych <img> bez src, zero ikon-fontow z CDN ktore moga nie wczytac sie offline.
+- Na samej gorze <body> dyskretny banner: "PODGLAD / MOCKUP - przykladowa wizualizacja nowej strony" (jasny akcent na ciemnym tle).
+- NIE wymyslaj innych danych kontaktowych niz podane.
+
+Odpowiedz WYLACZNIE kodem HTML, zaczynajac od <!DOCTYPE html>, bez markdown, bez komentarzy, bez tekstu przed/po. Kod musi byc KOMPLETNY i zamkniety (</body></html> na koncu) - jesli trzeba, ogranicz liczbe elementow w sekcjach tak, aby cale HTML sie zmiescilo i bylo poprawnie zamkniete.""",
         user_prompt, ak, max_tokens=8000, model="claude-sonnet-4-6", timeout=180
     )
     return _inject_nav_script(_strip_code_fence(tekst))
