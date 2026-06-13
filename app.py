@@ -376,6 +376,14 @@ def analiza_claude_b2b(f, branza, ak, wer, score, strata=0, lok=""):
             "formalne 'Dzien dobry, czy rozmawiam z wlascicielem/wlascicielka [niszy]?' - UZYJ TEGO STYLU TYLKO TERAZ, w innych przypadkach unikaj go",
         ]
         styl_otwarcia = STYLE_OTWARCIA[hash(f["nazwa"] + f["telefon"]) % len(STYLE_OTWARCIA)]
+        STYLE_ZAKONCZENIA = [
+            "pytanie o najlepszy dzien/godzine kontaktu, bez slowa 'raport' czy 'plan'",
+            "propozycja konkretnej godziny ('moge zadzwonic dzis po 16:00?')",
+            "pytanie czy odbiorca sam zauwazyl ten problem, zanim zaproponujesz pomoc",
+            "krotka informacja co konkretnie poprawisz + pytanie 'da Pan znac jak zaczac?'",
+            "lekki urgency - konkurencja juz dziala, pytanie czy moga porozmawiac w tym tygodniu",
+        ]
+        styl_zakonczenia = STYLE_ZAKONCZENIA[hash(f["telefon"] + branza) % len(STYLE_ZAKONCZENIA)]
         user_prompt = f"""NAZWA FIRMY: {f["nazwa"]}
 NISZA/BRANZA: {branza}
 MIASTO/LOKALIZACJA: {lok}
@@ -385,6 +393,7 @@ OCENA GOOGLE: {f["ocena"]}
 WYKRYTE BLEDY (killer flaws): {prob_str}
 SZACOWANA UTRACONA SPRZEDAZ: {strata} PLN miesiecznie (wyliczona na bazie wartosci typowego klienta w tej niszy)
 STYL OTWARCIA (uzyj tego dla SMS i CALL): {styl_otwarcia}
+STYL ZAKONCZENIA/CTA (uzyj tego dla SMS i CALL): {styl_zakonczenia}
 
 Wygeneruj komunikaty wedlug systemu opisanego w instrukcjach. Zwroc JSON z polami: problem, sms, call, email_temat, email_tresc, followup1, followup2, szansa"""
 
@@ -413,6 +422,10 @@ ZASADA 3 - STRUKTURA (Pattern Interrupt):
 - EMAIL (5 zdan): pierwszy kontakt to wartosc/audyt (co klient traci), NIE sprzedaz strony. Temat max 8 slow.
 
 ZASADA 4 - JEZYK MUSI BYC 100% POPRAWNY I GOTOWY DO WYSLANIA: Tekst musi byc bezbledny pod wzgledem ortografii, gramatyki i odmiany (przypadki, liczby, rodzaje) - to wiadomosc, ktora handlowiec wysyla "as-is" bez korekty. Zero wymyslonych/nieistniejacych slow (np. "konkwencja"), zero nazw firm spoza danych wejsciowych. Pisz prostym, naturalnym jezykiem polskim, jakby pisal to czlowiek, nie tlumacz maszynowy. Przed odpowiedzia w mysli sprawdz kazde zdanie pod wzgledem poprawnosci jezykowej.
+
+ZASADA 4.5 - ZAKONCZENIE/CTA: KAZDA wiadomosc (SMS i CALL) musi konczyc sie zgodnie ze wskazanym "STYL ZAKONCZENIA/CTA" - NIE powtarzaj w kolko schematu "Mam X-minutowy raport/konkretny plan, kiedy moge zadzwonic?" we wszystkich wiadomosciach, bo to brzmi jak bot wysylajacy ten sam szablon do wszystkich. Rozne firmy = rozne zakonczenia.
+
+ZASADA 4.6 - NAZWA FIRMY W TEKSCIE: Jesli odwolujesz sie do nazwy firmy w zdaniu, odmien ja gramatycznie poprawnie przez przypadki (np. "w sprawie Salonu Verona", nie "w sprawie Salon Verona"; "Pracowni Orlecka", nie "Orlecka Pracowni"). Jesli odmiana nazwy brzmi nienaturalnie/niezgrabnie, NIE odmieniaj jej i uzyj w formie podstawowej, ALBO calkowicie pomin nazwe firmy w zdaniu (np. "Wasza strona..." zamiast wstawiania nazwy na sile). NIE przedstawiaj nadawcy jako "z zespolu audytu stron internetowych" ani inne wymyslone tytuly/role - jesli przedstawiasz sie z imienia, samo imie wystarczy, bez wymyslonej firmy/dzialu.
 
 ZASADA 5 - WSKAZ KONKRETNE ROZWIAZANIE: Nie konczy sie na "mam raport, kiedy zadzwonic" - w SMS/CALL/EMAIL musi byc jasno wskazane, CO konkretnie trzeba zrobic, zeby przestac tracic te pieniadze (np. "wystarczy dodac SSL i przycisk rezerwacji online", "strona potrzebuje wersji mobilnej i formularza kontaktowego"), powiazane z WYKRYTYMI BLEDAMI. To ma brzmiec jak gotowa diagnoza + propozycja, nie tylko zachce do rozmowy.
 
