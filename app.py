@@ -412,6 +412,10 @@ ZASADA 3 - STRUKTURA (Pattern Interrupt):
 - CALL (3-4 zdania, pierwsze 15 sekund decyduje): przelamuje schemat, uderza w konkretny blad + kwote straty, konczy pytaniem czy ma czas na 2 minuty/raport.
 - EMAIL (5 zdan): pierwszy kontakt to wartosc/audyt (co klient traci), NIE sprzedaz strony. Temat max 8 slow.
 
+ZASADA 4 - JEZYK MUSI BYC 100% POPRAWNY I GOTOWY DO WYSLANIA: Tekst musi byc bezbledny pod wzgledem ortografii, gramatyki i odmiany (przypadki, liczby, rodzaje) - to wiadomosc, ktora handlowiec wysyla "as-is" bez korekty. Zero wymyslonych/nieistniejacych slow (np. "konkwencja"), zero nazw firm spoza danych wejsciowych. Pisz prostym, naturalnym jezykiem polskim, jakby pisal to czlowiek, nie tlumacz maszynowy. Przed odpowiedzia w mysli sprawdz kazde zdanie pod wzgledem poprawnosci jezykowej.
+
+ZASADA 5 - WSKAZ KONKRETNE ROZWIAZANIE: Nie konczy sie na "mam raport, kiedy zadzwonic" - w SMS/CALL/EMAIL musi byc jasno wskazane, CO konkretnie trzeba zrobic, zeby przestac tracic te pieniadze (np. "wystarczy dodac SSL i przycisk rezerwacji online", "strona potrzebuje wersji mobilnej i formularza kontaktowego"), powiazane z WYKRYTYMI BLEDAMI. To ma brzmiec jak gotowa diagnoza + propozycja, nie tylko zachce do rozmowy.
+
 PRZYKLAD ZLY (NIGDY tak nie pisz):
 "Dzien dobry, rozmawiam z wlascicielem HairFamily? Zauwazylismy, ze dla internetu praktycznie nie istniejecie - klienci szukaja Was w Google, znajduja salony obok i tam ida. To okolo 750 zlotych utraconej sprzedazy kazdego miesiaca. Czy ma Pan 2 minuty, zeby omowic konkretny plan?"
 (Powod: zaczyna od "Zauwazylismy, ze" - zakazana fraza)
