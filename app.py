@@ -245,13 +245,21 @@ def jest_sieciowka(nazwa): return any(s in nazwa.lower() for s in SIECIOWKI)
 def szukaj_maps(q, sk, limit=10):
     try:
         r = requests.post("https://google.serper.dev/maps", headers={"X-API-KEY": sk, "Content-Type": "application/json"}, json={"q": q, "gl": "pl", "hl": "pl", "num": limit}, timeout=12)
-        return [{"nazwa": p.get("title","?"), "telefon": p.get("phoneNumber","brak"), "www": p.get("website","brak"), "opinie": p.get("ratingCount",0), "ocena": p.get("rating",0), "adres": p.get("address","?"), "kategoria": p.get("category","")} for p in r.json().get("places",[])]
+        return [{"nazwa": p.get("title","?"), "telefon": p.get("phoneNumber","brak"), "www": p.get("website","brak"), "opinie": p.get("ratingCount",0), "ocena": p.get("rating",0), "adres": p.get("address","?"), "kategoria": p.get("category",""), "cid": p.get("cid","")} for p in r.json().get("places",[])]
+    except: return []
+
+def pobierz_opinie(cid, sk, limit=5):
+    """Pobiera ostatnie opinie Google dla firmy (po cid) - uzywane do wzbogacenia analizy HOT/WARM leadow."""
+    if not cid: return []
+    try:
+        r = requests.post("https://google.serper.dev/reviews", headers={"X-API-KEY": sk, "Content-Type": "application/json"}, json={"cid": cid, "gl": "pl", "hl": "pl"}, timeout=12)
+        return [rev.get("snippet","") for rev in r.json().get("reviews",[])[:limit] if rev.get("snippet")]
     except: return []
 
 def szukaj_web(q, sk, limit=10):
     try:
         r = requests.post("https://google.serper.dev/search", headers={"X-API-KEY": sk, "Content-Type": "application/json"}, json={"q": q + " kontakt telefon", "gl": "pl", "hl": "pl", "num": limit}, timeout=12)
-        return [{"nazwa": p.get("title","?"), "telefon": "sprawdz na stronie", "www": p.get("link","brak"), "opinie": 0, "ocena": 0, "adres": p.get("snippet","")[:100], "kategoria": ""} for p in r.json().get("organic",[])]
+        return [{"nazwa": p.get("title","?"), "telefon": "sprawdz na stronie", "www": p.get("link","brak"), "opinie": 0, "ocena": 0, "adres": p.get("snippet","")[:100], "kategoria": "", "cid": ""} for p in r.json().get("organic",[])]
     except: return []
 
 TECH_SYGNATURY = [
@@ -374,7 +382,7 @@ def status_leada(score):
     elif score >= 60: return "WARM"
     else: return "COLD"
 
-def analiza_claude_b2b(f, branza, ak, wer, score, strata=0, lok=""):
+def analiza_claude_b2b(f, branza, ak, wer, score, strata=0, lok="", opinie_tekst=None):
     FALLBACK = {"problem": "Brak analizy AI", "sms": "Dzien dobry! Budujemy strony dla firm z branzy " + branza + ". Czy moge przedstawic oferte?", "call": "Dzien dobry, dzwonie w sprawie strony internetowej. Czy maja Panstwo chwile?", "email_temat": "Propozycja wspolpracy", "email_tresc": "Dzien dobry, chcielibysmy przedstawic oferte na strone WWW.", "followup1": "Czy mieli Panstwo okazje zapoznac sie z nasza oferta?", "followup2": "To ostatnia wiadomosc — czy moge pomoc?", "szansa": 50}
     if not ak: return FALLBACK
     try:
@@ -406,6 +414,7 @@ WYKRYTE BLEDY (killer flaws): {prob_str}
 SZACOWANA UTRACONA SPRZEDAZ: {strata} PLN miesiecznie (wyliczona na bazie wartosci typowego klienta w tej niszy)
 STYL OTWARCIA (uzyj tego dla SMS i CALL): {styl_otwarcia}
 STYL ZAKONCZENIA/CTA (uzyj tego dla SMS i CALL): {styl_zakonczenia}
+TRESC OPINII KLIENTOW (jesli dostepne): {chr(10).join("- " + o for o in opinie_tekst) if opinie_tekst else "brak danych"}
 
 Wygeneruj komunikaty wedlug systemu opisanego w instrukcjach. Zwroc JSON z polami: problem, sms, call, email_temat, email_tresc, followup1, followup2, szansa"""
 
@@ -439,6 +448,8 @@ ZASADA 4 - JEZYK MUSI BYC 100% POPRAWNY I GOTOWY DO WYSLANIA: Tekst musi byc bez
 ZASADA 4.5 - ZAKONCZENIE/CTA: KAZDA wiadomosc (SMS i CALL) musi konczyc sie zgodnie ze wskazanym "STYL ZAKONCZENIA/CTA" - NIE powtarzaj w kolko schematu "Mam X-minutowy raport/konkretny plan, kiedy moge zadzwonic?" we wszystkich wiadomosciach, bo to brzmi jak bot wysylajacy ten sam szablon do wszystkich. Rozne firmy = rozne zakonczenia.
 
 ZASADA 4.6 - NAZWA FIRMY W TEKSCIE: Jesli odwolujesz sie do nazwy firmy w zdaniu, odmien ja gramatycznie poprawnie przez przypadki (np. "w sprawie Salonu Verona", nie "w sprawie Salon Verona"; "Pracowni Orlecka", nie "Orlecka Pracowni"). Jesli odmiana nazwy brzmi nienaturalnie/niezgrabnie, NIE odmieniaj jej i uzyj w formie podstawowej, ALBO calkowicie pomin nazwe firmy w zdaniu (np. "Wasza strona..." zamiast wstawiania nazwy na sile). NIE przedstawiaj nadawcy jako "z zespolu audytu stron internetowych" ani inne wymyslone tytuly/role - jesli przedstawiasz sie z imienia, samo imie wystarczy, bez wymyslonej firmy/dzialu.
+
+ZASADA 4.7 - OPINIE KLIENTOW: Jesli podano TRESC OPINII KLIENTOW, przeskanuj je w poszukiwaniu powtarzajacych sie skarg (np. "nie moglem sie dodzwonic", "brak odpowiedzi na wiadomosc", "ciezko znalezc info o cenach/godzinach"). Jesli znajdziesz konkretna, powtarzajaca sie skarge zwiazana z obecnoscia online/kontaktem, uzyj jej jako dodatkowego, bardzo mocnego argumentu (np. "klienci pisza w opiniach, ze nie mogli sie dodzwonic - to dokladnie to, co strona z formularzem i czatem rozwiazuje"). Jesli opinie nie sa dostepne lub nie zawieraja nic uzytecznego, zignoruj ta zasade.
 
 ZASADA 5 - WSKAZ KONKRETNE ROZWIAZANIE: Nie konczy sie na "mam raport, kiedy zadzwonic" - w SMS/CALL/EMAIL musi byc jasno wskazane, CO konkretnie trzeba zrobic, zeby przestac tracic te pieniadze (np. "wystarczy dodac SSL i przycisk rezerwacji online", "strona potrzebuje wersji mobilnej i formularza kontaktowego"), powiazane z WYKRYTYMI BLEDAMI. To ma brzmiec jak gotowa diagnoza + propozycja, nie tylko zachce do rozmowy.
 
@@ -751,7 +762,8 @@ if st.session_state.tryb_modulu == "B2B":
             score = oblicz_score(f, wer)
             if score < min_score: continue
             strata = oblicz_strate_finansowa(f, wer, branza)
-            ai = analiza_claude_b2b(f, branza, AK, wer, score, strata, lok)
+            opinie_tekst = pobierz_opinie(f.get("cid",""), SK) if score >= 60 else []
+            ai = analiza_claude_b2b(f, branza, AK, wer, score, strata, lok, opinie_tekst)
             rows.append({"Status": status_leada(score), "Nazwa": f["nazwa"], "Telefon": f["telefon"], "WWW": f["www"], "Adres": f["adres"], "Opinie": f["opinie"], "Ocena Google": f["ocena"], "Ocena strony": wer["ocena_www"], "Technologia": wer["technologia"], "PageSpeed": wer["pagespeed"] if wer["pagespeed"] is not None else "-", "Reklamuje sie": ", ".join(wer["piksele"]) if wer["piksele"] else "NIE", "SSL": "TAK" if wer["ssl"] else "NIE", "Rezerwacja": "TAK" if wer["ma_rezerwacje"] else "NIE", "Problemy WWW": " | ".join(wer["problemy"]) if wer["problemy"] else "OK", "AI Score": score, "Strata/mc (PLN)": strata, "Szansa %": ai.get("szansa",50), "Problem": ai.get("problem",""), "SMS": ai.get("sms",""), "Call": ai.get("call",""), "Email temat": ai.get("email_temat",""), "Email tresc": ai.get("email_tresc",""), "Followup 1": ai.get("followup1",""), "Followup 2": ai.get("followup2","")})
         bar.progress(100); msg.empty(); stats_box.empty(); bar.empty()
         if not rows: st.warning("Brak wynikow. Zmien filtry."); st.stop()
