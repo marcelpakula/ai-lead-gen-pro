@@ -572,6 +572,55 @@ Odpowiedz WYLACZNIE kodem HTML, zaczynajac od <!DOCTYPE html>, bez markdown, bez
     if html.startswith("```"): html = html.split("\n", 1)[1].rsplit("```", 1)[0]
     return html
 
+def generuj_mockup_premium(d, ak):
+    """Generuje premium, w pelni spersonalizowany mockup strony na podstawie danych zebranych w wizardzie."""
+    user_prompt = f"""NAZWA FIRMY: {d["nazwa"]}
+BRANZA/NISZA: {d["branza"]}
+MIASTO/ADRES: {d["adres"]}
+TELEFON: {d["telefon"]}
+EMAIL: {d.get("email","")}
+
+WYROZNIK FIRMY (USP) - to ma byc glowny przekaz hero sekcji: {d["usp"]}
+
+OFERTA/USLUGI (uwzglednij w sekcji usług, z cenami jesli podane):
+{d["oferta"]}
+
+NAJLEPSZE OPINIE KLIENTOW (uzyj jako social proof, mozesz delikatnie skrocic, ale zachowaj sens i ton):
+{d["opinie"] if d["opinie"] else "brak - wymysl 2 realistyczne, pozytywne opinie dopasowane do branzy"}
+
+STYL WIZUALNY: {d["styl"]}
+KOLOR DOMINUJACY: {d["kolor"]}
+GLOWNY CEL STRONY (najwazniejsze CTA): {d["cel"]}
+
+DODATKOWE SEKCJE DO UWZGLEDNIENIA: {", ".join(d["elementy"]) if d["elementy"] else "brak dodatkowych - tylko standardowe"}
+
+Wygeneruj kompletny, samodzielny plik HTML (jeden plik, CSS inline w <style> w <head>, bez zewnetrznych zaleznosci poza Google Fonts) - strona ma robic efekt WOW i wyglądać lepiej niz 95% stron lokalnych firm w tej branzy."""
+
+    tekst = claude_call(
+        """Jestes jednym z najlepszych na swiecie web designerow/UX, specjalizujesz sie w stronach-wizytowkach dla lokalnych firm, ktore maja jeden cel: zachwycic wlasciciela firmy na pierwszy rzut oka (efekt WOW) i maksymalizowac konwersje (telefon/rezerwacja/kontakt).
+
+Generujesz JEDEN kompletny plik HTML - to MOCKUP wysylany potencjalnemu klientowi PRZED podpisaniem umowy, ma sprawic, ze klient pomysli "chce taka strone, ile to kosztuje?".
+
+WYMAGANIA JAKOSCIOWE (kluczowe - to ma byc NA NAJWYZSZYM POZIOMIE, nie szablon):
+- Jeden plik HTML, CSS inline w <style> w <head>, zero zewnetrznych JS/CSS (Google Fonts link OK).
+- Pelna responsywnosc (mobile-first), subtelne animacje/transitions (hover, fade-in przy scrollu via CSS), nowoczesny premium design.
+- Hero sekcja musi byc oparta na podanym USP firmy - nie generyczny slogan, a konkretny powod "dlaczego ja, a nie konkurencja".
+- Sekcja uslug/oferty z DANYCH WEJSCIOWYCH (nie wymyslaj innej oferty), estetyczne karty/grid.
+- Sekcja social proof z PODANYMI OPINIAMI (jesli sa) - wyeksponowane wizualnie (gwiazdki, cytaty, ladne karty).
+- Sekcja kontakt z PRAWDZIWYMI danymi (adres, telefon, email) + wyraznie CTA zgodne z "GLOWNY CEL STRONY".
+- Zastosuj podany STYL WIZUALNY i KOLOR DOMINUJACY konsekwentnie w calej stronie (tla, akcenty, przyciski).
+- Jesli podano DODATKOWE SEKCJE (np. galeria, FAQ, cennik, mapa, before/after, certyfikaty) - dodaj je estetycznie, dopasowane do branzy.
+- Zdjecia: uzyj placeholderow https://picsum.photos/seed/{losowy-tekst}/{szerokosc}/{wysokosc} (rozne seedy).
+- Pod hero dodaj dyskretny banner: "PODGLAD / MOCKUP - przykladowa wizualizacja nowej strony" w jasnym kolorze.
+- NIE wymyslaj innych danych kontaktowych niz podane. NIE generuj generycznego, "plastikowego" designu - to ma wyglądać jak praca topowego studia.
+
+Odpowiedz WYLACZNIE kodem HTML, zaczynajac od <!DOCTYPE html>, bez markdown, bez komentarzy, bez tekstu przed/po.""",
+        user_prompt, ak, 6000
+    )
+    html = tekst.strip()
+    if html.startswith("```"): html = html.split("\n", 1)[1].rsplit("```", 1)[0]
+    return html
+
 # ── FUNKCJE B2C ──
 def serper_search(query, sk, num=10):
     try:
@@ -796,13 +845,16 @@ if pozostalo <= 5:
     st.markdown(f'<div class="warning-box">⚠️ Zostało Ci tylko <b>{pozostalo} skanów</b>. Odnów subskrypcję.</div>', unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
 
-mc1, mc2, _ = st.columns([1.3, 1.5, 3])
+mc1, mc2, mc3, _ = st.columns([1.3, 1.5, 1.7, 1.8])
 with mc1:
     if st.button("B2B — Znajdź firmy do oferty", type="primary" if st.session_state.tryb_modulu=="B2B" else "secondary", use_container_width=True):
         st.session_state.tryb_modulu = "B2B"; st.rerun()
 with mc2:
     if st.button("B2C — Intelligence rynkowy", type="primary" if st.session_state.tryb_modulu=="B2C" else "secondary", use_container_width=True):
         st.session_state.tryb_modulu = "B2C"; st.rerun()
+with mc3:
+    if st.button("🎨 Generator Mockupów Premium", type="primary" if st.session_state.tryb_modulu=="MOCKUP" else "secondary", use_container_width=True):
+        st.session_state.tryb_modulu = "MOCKUP"; st.rerun()
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
@@ -994,6 +1046,47 @@ if st.session_state.tryb_modulu == "B2B":
                 st.markdown("**Podglad: " + st.session_state["podglad_nazwa"] + "**")
                 st.components.v1.html(st.session_state["podglad_html"], height=600, scrolling=True)
                 st.download_button("⬇️ Pobierz plik HTML (do wyslania klientowi)", st.session_state["podglad_html"].encode("utf-8"), file_name="podglad_" + st.session_state["podglad_nazwa"].replace(" ","_") + ".html", mime="text/html", use_container_width=True)
+
+# ══════════════════════════════════════════
+# MODUL GENERATOR MOCKUPOW PREMIUM
+# ══════════════════════════════════════════
+elif st.session_state.tryb_modulu == "MOCKUP":
+    st.markdown('<div class="section-header">🎨 Generator Mockupów Premium — strona na efekt WOW</div>', unsafe_allow_html=True)
+    st.markdown('<div class="info-box">Wypełnij dane firmy poniżej — im więcej szczegółów (USP, opinie, styl), tym lepszy i bardziej spersonalizowany mockup. To ma być najwyższy poziom jaki możemy wygenerować, nie szablon.</div>', unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    mcol1, mcol2 = st.columns(2)
+    with mcol1:
+        m_nazwa = st.text_input("Nazwa firmy", placeholder="np. Salon Fryzjerski Verona")
+        m_branza = st.text_input("Branża / nisza", placeholder="np. Salon fryzjerski")
+        m_adres = st.text_input("Adres / miasto", placeholder="np. ul. Kwiatowa 5, Kraków")
+        m_telefon = st.text_input("Telefon", placeholder="np. 600 100 200")
+        m_email = st.text_input("Email (opcjonalnie)", placeholder="np. kontakt@firma.pl")
+    with mcol2:
+        m_styl = st.selectbox("Styl wizualny", ["Luksusowy / elegancki", "Minimalistyczny", "Energiczny / kolorowy", "Klasyczny / rzemieślniczy", "Industrialny / surowy", "Naturalny / eco"])
+        m_kolor = st.text_input("Kolor dominujący (opcjonalnie)", placeholder="np. głęboka zieleń i złoto")
+        m_cel = st.selectbox("Główny cel strony (CTA)", ["Telefon / zadzwoń teraz", "Rezerwacja online", "Formularz kontaktowy", "Wizyta w salonie/punkcie", "Zamówienie / sprzedaż"])
+        m_elementy = st.multiselect("Dodatkowe sekcje", ["Galeria zdjęć", "Cennik", "FAQ", "Mapa / lokalizacja", "Before/After", "Certyfikaty / nagrody", "Zespół / o nas"])
+
+    m_usp = st.text_area("Co wyróżnia tę firmę na tle konkurencji (USP)?", placeholder="np. 15 lat doświadczenia, jedyny salon w mieście z produktami premium X, błyskawiczna obsługa bez czekania...")
+    m_oferta = st.text_area("Oferta / usługi (z cenami jeśli możliwe)", placeholder="np. Strzyżenie damskie - 120 zł\nKoloryzacja - od 250 zł\nStylizacja ślubna - 400 zł")
+    m_opinie = st.text_area("Najlepsze opinie klientów (wklej 1-3, opcjonalnie)", placeholder="np. \"Najlepszy salon w Krakowie, profesjonalna obsługa i super atmosfera!\" - Anna K.")
+
+    if st.button("🎨 Generuj premium mockup", type="primary", use_container_width=True):
+        if not m_nazwa.strip() or not m_branza.strip():
+            st.error("Podaj przynajmniej nazwę firmy i branżę.")
+        else:
+            dane_mockup = {"nazwa": m_nazwa, "branza": m_branza, "adres": m_adres, "telefon": m_telefon, "email": m_email, "usp": m_usp, "oferta": m_oferta, "opinie": m_opinie, "styl": m_styl, "kolor": m_kolor, "cel": m_cel, "elementy": m_elementy}
+            with st.spinner("Generuję premium mockup dla " + m_nazwa + "... to może potrwać chwilę"):
+                html = generuj_mockup_premium(dane_mockup, AK)
+            st.session_state["mockup_html"] = html
+            st.session_state["mockup_nazwa"] = m_nazwa
+
+    if "mockup_html" in st.session_state:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("**Podgląd: " + st.session_state["mockup_nazwa"] + "**")
+        st.components.v1.html(st.session_state["mockup_html"], height=700, scrolling=True)
+        st.download_button("⬇️ Pobierz plik HTML (do wysłania klientowi)", st.session_state["mockup_html"].encode("utf-8"), file_name="mockup_" + st.session_state["mockup_nazwa"].replace(" ","_") + ".html", mime="text/html", use_container_width=True)
 
 # ══════════════════════════════════════════
 # MODUL B2C
