@@ -799,14 +799,15 @@ if st.session_state.tryb_modulu == "B2B":
             for _, row in df.head(25).iterrows():
                 with st.expander(row["Status"] + " | " + row["Nazwa"] + " — " + row["Telefon"] + " | Score: " + str(row["AI Score"]) + "/99"):
                     ca, cb = st.columns(2)
-                    with ca: st.markdown("**SMS:**"); st.info(row["SMS"]); st.caption("Problem: " + row["Problem"])
-                    with cb: st.markdown("**Cold Call:**"); st.success(row["Call"])
+                    with ca: st.markdown("**SMS:** (kliknij ikone w prawym gornym rogu, aby skopiowac)"); st.code(row["SMS"], language=None, wrap_lines=True); st.caption("Problem: " + row["Problem"])
+                    with cb: st.markdown("**Cold Call:** (kliknij ikone w prawym gornym rogu, aby skopiowac)"); st.code(row["Call"], language=None, wrap_lines=True)
         with tab3:
             for _, row in df.head(25).iterrows():
                 with st.expander(row["Status"] + " | " + row["Nazwa"] + " | Score: " + str(row["AI Score"]) + "/99"):
-                    st.markdown("**Email — Temat: " + row["Email temat"] + "**"); st.warning(row["Email tresc"])
-                    st.markdown("**Follow-up 1 (dzien 3):**"); st.info(row["Followup 1"])
-                    st.markdown("**Follow-up 2 (dzien 7):**"); st.error(row["Followup 2"])
+                    st.markdown("**Email — Temat:** `" + row["Email temat"] + "` (kliknij ikone, aby skopiowac temat lub tresc)")
+                    st.code(row["Email tresc"], language=None, wrap_lines=True)
+                    st.markdown("**Follow-up 1 (dzien 3):**"); st.code(row["Followup 1"], language=None, wrap_lines=True)
+                    st.markdown("**Follow-up 2 (dzien 7):**"); st.code(row["Followup 2"], language=None, wrap_lines=True)
         with tab4:
             st.markdown("### TOP 5 do kontaktu TERAZ")
             top5 = df[df["Status"]=="HOT"].head(5) if len(df[df["Status"]=="HOT"]) >= 3 else df.head(5)
@@ -814,7 +815,7 @@ if st.session_state.tryb_modulu == "B2B":
                 ta, tb, tc = st.columns([1,1,2])
                 with ta: st.markdown("**" + row["Nazwa"] + "**"); st.markdown("Tel: `" + row["Telefon"] + "`")
                 with tb: st.markdown("Score: **" + str(row["AI Score"]) + "/99**"); st.caption(row["Problem"]); st.caption("💸 Strata: ~" + str(int(row["Strata/mc (PLN)"])) + " zl/mc")
-                with tc: st.info("SMS: " + row["SMS"])
+                with tc: st.markdown("SMS (kliknij ikone, aby skopiowac):"); st.code(row["SMS"], language=None, wrap_lines=True)
                 st.markdown("<hr>", unsafe_allow_html=True)
         with tab5:
             with st.expander("📖 Slownik - co oznaczaja te wskazniki?", expanded=True):
