@@ -543,35 +543,6 @@ Format JSON: {"problem": "max 8 slow - nazwa killer flaw", "sms": "string", "cal
     except:
         return FALLBACK
 
-def generuj_podglad_strony(f, branza, ak, lok=""):
-    """Generuje przykladowa, statyczna strone HTML (single-file) dla leada - do wyslania jako podglad/mockup."""
-    user_prompt = f"""NAZWA FIRMY: {f["nazwa"]}
-BRANZA/NISZA: {branza}
-MIASTO/LOKALIZACJA: {lok}
-ADRES: {f.get("adres","")}
-TELEFON: {f.get("telefon","")}
-OCENA GOOGLE: {f.get("ocena",0)} ({f.get("opinie",0)} opinii)
-
-Wygeneruj kompletny, samodzielny plik HTML (jeden plik, CSS inline w <style> w <head>, bez zewnetrznych zaleznosci poza Google Fonts) - profesjonalna strona-wizytowka dla tej firmy."""
-
-    tekst = claude_call(
-        """Jestes elitarnym web designerem tworzacym strony-wizytowki dla lokalnych firm (fryzjerzy, dekarze, restauracje, prawnicy itp.). Generujesz JEDEN kompletny plik HTML, gotowy do otwarcia w przegladarce - to ma byc MOCKUP/PODGLAD do pokazania potencjalnemu klientowi PRZED podpisaniem umowy, zeby zobaczyl "jak moglaby wygladac jego nowa strona".
-
-WYMAGANIA:
-- Jeden plik HTML z <style> inline w <head>, zero zewnetrznych plikow CSS/JS (Google Fonts link OK).
-- Responsywny (mobile-friendly), nowoczesny design dopasowany do branzy (kolory, ton).
-- Sekcje: hero z nazwa firmy i chwytliwym sloganem, "O nas"/opis uslug (2-3 zdania dopasowane do branzy), lista 3-4 uslug/produktow z krotkim opisem, sekcja z opinia/social proof (mozesz wymyslic realistyczna przykladowa opinie), sekcja kontakt z adresem/telefonem podanym w danych, stopka.
-- Uzyj prawdziwej nazwy firmy, adresu i telefonu z danych wejsciowych. NIE wymyslaj innych danych kontaktowych.
-- Zdjecia: uzyj placeholderow z https://picsum.photos/seed/{losowy-tekst}/{szerokosc}/{wysokosc} (rozne seedy dla roznych zdjec).
-- Pod hero dodaj dyskretny banner: "PODGLAD / MOCKUP - przykladowa wizualizacja nowej strony" w jasnym kolorze.
-
-Odpowiedz WYLACZNIE kodem HTML, zaczynajac od <!DOCTYPE html>, bez markdown, bez komentarzy, bez tekstu przed/po.""",
-        user_prompt, ak, 4000
-    )
-    html = tekst.strip()
-    if html.startswith("```"): html = html.split("\n", 1)[1].rsplit("```", 1)[0]
-    return html
-
 def generuj_mockup_premium(d, ak):
     """Generuje premium, w pelni spersonalizowany mockup strony na podstawie danych zebranych w wizardzie."""
     user_prompt = f"""NAZWA FIRMY: {d["nazwa"]}
@@ -940,7 +911,7 @@ if st.session_state.tryb_modulu == "B2B":
         strata_total = int(df["Strata/mc (PLN)"].sum())
         st.markdown(f'<div class="warning-box" style="text-align:center;padding:1.2rem"><div style="font-size:.85rem;color:#92400e;font-weight:600;text-transform:uppercase;letter-spacing:.05em">💸 Calkowita potencjalna strata tych firm</div><div style="font-size:2.2rem;font-weight:800;color:#b45309;margin:.3rem 0">{strata_total:,} PLN / miesiac</div><div style="font-size:.85rem;color:#92400e">To realny pieniadz, ktory ten rynek traci kazdy miesiac przez braki na stronach WWW - i Twoj argument numer 1 w kazdej rozmowie.</div></div>'.replace(",", " "), unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
-        tab1,tab2,tab3,tab4,tab5,tab6,tab7 = st.tabs(["Tabela wynikow","SMS / Cold Call","Sekwencja Email","TOP 5","Analiza","Eksport","🌐 Podglad strony"])
+        tab1,tab2,tab3,tab4,tab5,tab6 = st.tabs(["Tabela wynikow","SMS / Cold Call","Sekwencja Email","TOP 5","Analiza","Eksport"])
         with tab1:
             st.dataframe(df[["Status","Nazwa","Telefon","AI Score","Strata/mc (PLN)"]], use_container_width=True, hide_index=True, column_config={"AI Score": st.column_config.ProgressColumn("AI Score", min_value=0, max_value=99, format="%d/99"), "Strata/mc (PLN)": st.column_config.NumberColumn("Strata/mc (PLN)", format="%d zl")})
             with st.expander("📈 Szansa i diagnoza problemu"):
@@ -1029,23 +1000,6 @@ if st.session_state.tryb_modulu == "B2B":
                         else: st.error("Webhook odpowiedzial bledem: " + str(resp.status_code))
                     except Exception as e:
                         st.error("Nie udalo sie wyslac do Webhooka: " + str(e))
-
-        with tab7:
-            st.markdown("#### 🌐 Wygeneruj podglad nowej strony dla leada")
-            st.markdown('<div class="info-box">Wybierz firme i kliknij "Generuj" - AI stworzy przykladowa strone-wizytowke (mockup), ktora mozesz pokazac/wyslac potencjalnemu klientowi PRZED podpisaniem umowy ("zobacz, jak moglaby wygladac Wasza nowa strona"). Generowanie zajmuje 15-30 sekund.</div>', unsafe_allow_html=True)
-            lead_nazwy = df["Nazwa"].tolist()
-            wybrany = st.selectbox("Wybierz firme", lead_nazwy)
-            if st.button("🎨 Generuj podglad strony", use_container_width=True):
-                row = df[df["Nazwa"] == wybrany].iloc[0]
-                f_preview = {"nazwa": row["Nazwa"], "adres": row["Adres"], "telefon": row["Telefon"], "ocena": row["Ocena Google"], "opinie": row["Opinie"]}
-                with st.spinner("Generuje podglad strony dla " + wybrany + "..."):
-                    html = generuj_podglad_strony(f_preview, branza, AK, lok)
-                st.session_state["podglad_html"] = html
-                st.session_state["podglad_nazwa"] = wybrany
-            if "podglad_html" in st.session_state:
-                st.markdown("**Podglad: " + st.session_state["podglad_nazwa"] + "**")
-                st.components.v1.html(st.session_state["podglad_html"], height=600, scrolling=True)
-                st.download_button("⬇️ Pobierz plik HTML (do wyslania klientowi)", st.session_state["podglad_html"].encode("utf-8"), file_name="podglad_" + st.session_state["podglad_nazwa"].replace(" ","_") + ".html", mime="text/html", use_container_width=True)
 
 # ══════════════════════════════════════════
 # MODUL GENERATOR MOCKUPOW PREMIUM
