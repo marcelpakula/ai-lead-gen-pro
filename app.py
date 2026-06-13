@@ -585,7 +585,7 @@ TRESC I STRUKTURA:
 - Sekcja opinii klientow (social proof) z PODANYMI OPINIAMI - karty z gwiazdkami i cytatem.
 - Sekcja kontakt z PRAWDZIWYMI danymi (adres, telefon, email) + wyrazne CTA zgodne z GLOWNYM CELEM STRONY.
 - Jesli podano DODATKOWE SEKCJE (galeria, FAQ, cennik, mapa, before/after, certyfikaty, zespol) - dodaj je estetycznie, dopasowane do branzy.
-- Nawigacja to linki #anchor do sekcji na tej samej stronie (one-page) - kazdy <a href="#cos"> MUSI miec odpowiadajacy element id="cos" w dokumencie, dodaj scroll-smooth.
+- Nawigacja to linki #anchor do sekcji na tej samej stronie (one-page) - kazdy <a href="#cos"> MUSI miec odpowiadajacy element id="cos" w dokumencie. Dodaj do <html> klase "scroll-smooth" (Tailwind). Na koniec <body> dodaj <script> z fallbackiem: dla kazdego linku nav (querySelectorAll('nav a[href^="#"]')) dodaj addEventListener('click') ktory robi event.preventDefault() i document.querySelector(href).scrollIntoView({behavior:'smooth'}) - to gwarantuje dzialajaca nawigacje nawet w iframe.
 - Zdjecia: placeholdery https://picsum.photos/seed/{losowy-tekst}/{szerokosc}/{wysokosc} (rozne seedy).
 - Na samej gorze <body> dyskretny banner: "PODGLAD / MOCKUP - przykladowa wizualizacja nowej strony" (np. jasny akcent na ciemnym tle).
 - NIE wymyslaj innych danych kontaktowych niz podane. NIE generuj generycznego, "plastikowego" designu.
