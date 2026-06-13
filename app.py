@@ -895,6 +895,23 @@ if st.session_state.tryb_modulu == "B2B":
                 df_hw = df[df["Status"].isin(["HOT","WARM"])]
                 st.download_button("Pobierz HOT + WARM", df_hw.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig"), file_name="HOT_WARM_" + branza + ".csv", mime="text/csv", use_container_width=True)
 
+            st.markdown("<hr>", unsafe_allow_html=True)
+            st.markdown("#### 🔗 Wyslij leady do CRM / automatyzacji (Make, Zapier, Pipedrive...)")
+            st.markdown('<div class="info-box">Wklej adres Webhooka z Make/Zapier/innego narzedzia - kazdy lead zostanie wyslany jako JSON, ktory mozesz dalej przetworzyc (np. dodac do CRM, odpalic kampanie w Lemlist).</div>', unsafe_allow_html=True)
+            webhook_url = st.text_input("Webhook URL", placeholder="https://hook.eu1.make.com/...")
+            webhook_zakres = st.radio("Co wyslac?", ["Wszystkie leady", "Tylko HOT + WARM"], horizontal=True)
+            if st.button("🚀 Wyslij do Webhooka", use_container_width=True):
+                if not webhook_url:
+                    st.error("Podaj adres Webhooka.")
+                else:
+                    df_send = df if webhook_zakres == "Wszystkie leady" else df[df["Status"].isin(["HOT","WARM"])]
+                    try:
+                        resp = requests.post(webhook_url, json=df_send.to_dict(orient="records"), timeout=15)
+                        if resp.ok: st.success("Wyslano " + str(len(df_send)) + " leadow do Webhooka (status " + str(resp.status_code) + ").")
+                        else: st.error("Webhook odpowiedzial bledem: " + str(resp.status_code))
+                    except Exception as e:
+                        st.error("Nie udalo sie wyslac do Webhooka: " + str(e))
+
 # ══════════════════════════════════════════
 # MODUL B2C
 # ══════════════════════════════════════════
