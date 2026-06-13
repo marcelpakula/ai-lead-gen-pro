@@ -386,7 +386,7 @@ def status_leada(score):
     else: return "COLD"
 
 def analiza_claude_b2b(f, branza, ak, wer, score, strata=0, lok="", opinie_tekst=None):
-    FALLBACK = {"problem": "Brak analizy AI", "sms": "Dzien dobry! Budujemy strony dla firm z branzy " + branza + ". Czy moge przedstawic oferte?", "call": "Dzien dobry, dzwonie w sprawie strony internetowej. Czy maja Panstwo chwile?", "email_temat": "Propozycja wspolpracy", "email_tresc": "Dzien dobry, chcielibysmy przedstawic oferte na strone WWW.", "followup1": "Czy mieli Panstwo okazje zapoznac sie z nasza oferta?", "followup2": "To ostatnia wiadomosc — czy moge pomoc?", "szansa": 50}
+    FALLBACK = {"problem": "Brak analizy AI", "sms": "Dzien dobry! Budujemy strony dla firm z branzy " + branza + ". Czy moge przedstawic oferte?", "call": "Dzien dobry, dzwonie w sprawie strony internetowej. Czy maja Panstwo chwile?", "email_temat": "Propozycja wspolpracy", "email_tresc": "Dzien dobry, chcielibysmy przedstawic oferte na strone WWW.", "followup1": "Czy mieli Panstwo okazje zapoznac sie z nasza oferta?", "followup2": "To ostatnia wiadomosc — czy moge pomoc?", "szansa": 50, "odpowiedz_na_opinie": ""}
     if not ak: return FALLBACK
     try:
         prob_str = ", ".join(wer["problemy"]) if wer["problemy"] else "brak problemow"
@@ -455,6 +455,8 @@ ZASADA 4.6 - NAZWA FIRMY W TEKSCIE: Jesli odwolujesz sie do nazwy firmy w zdaniu
 
 ZASADA 4.7 - OPINIE KLIENTOW: Jesli podano TRESC OPINII KLIENTOW, przeskanuj je w poszukiwaniu powtarzajacych sie skarg (np. "nie moglem sie dodzwonic", "brak odpowiedzi na wiadomosc", "ciezko znalezc info o cenach/godzinach"). Jesli znajdziesz konkretna, powtarzajaca sie skarge zwiazana z obecnoscia online/kontaktem, uzyj jej jako dodatkowego, bardzo mocnego argumentu (np. "klienci pisza w opiniach, ze nie mogli sie dodzwonic - to dokladnie to, co strona z formularzem i czatem rozwiazuje"). Jesli opinie nie sa dostepne lub nie zawieraja nic uzytecznego, zignoruj ta zasade.
 
+ZASADA 4.8 - ODPOWIEDZ NA NAJGORSZA OPINIE (FREE GIFT): Jesli w TRESC OPINII KLIENTOW znajduje sie opinia wyraznie negatywna/krytyczna (narzekanie, niezadowolenie), napisz dla niej profesjonalna, empatyczna, deeskalujaca odpowiedz wlasciciela firmy (3-4 zdania, bez przepraszania na kolanach, ton spokojny i profesjonalny, z propozycja kontaktu offline w celu naprawy sytuacji) i zwroc w polu "odpowiedz_na_opinie". Ta odpowiedz to "darmowy prezent" dla leada - ma realna wartosc, zanim cokolwiek kupi, wiec musi byc gotowa do wklejenia 1:1. Jesli nie ma negatywnej opinii w danych, zwroc dla tego pola pusty string "".
+
 ZASADA 5 - WSKAZ KONKRETNE ROZWIAZANIE: Nie konczy sie na "mam raport, kiedy zadzwonic" - w SMS/CALL/EMAIL musi byc jasno wskazane, CO konkretnie trzeba zrobic, zeby przestac tracic te pieniadze (np. "wystarczy dodac SSL i przycisk rezerwacji online", "strona potrzebuje wersji mobilnej i formularza kontaktowego"), powiazane z WYKRYTYMI BLEDAMI. To ma brzmiec jak gotowa diagnoza + propozycja, nie tylko zachce do rozmowy.
 
 PRZYKLAD ZLY (NIGDY tak nie pisz):
@@ -468,7 +470,7 @@ PRZYKLAD DOBRY (SMS):
 "Dzien dobry, Pana salon nie pojawia sie w Google przy wyszukiwaniu fryzjera w okolicy - to ok. 750 zl/mc dla konkurencji. Mam 2-minutowy raport co da sie z tym zrobic. Kiedy moge zadzwonic?"
 - FOLLOWUP1/FOLLOWUP2: krotkie, nie powtarzaj tej samej kwoty/argumentu co w SMS/call - dorzuc nowy detal lub inny kat (np. social proof, urgency).
 
-Format JSON: {"problem": "max 8 slow - nazwa killer flaw", "sms": "string", "call": "string", "email_temat": "string", "email_tresc": "string", "followup1": "string", "followup2": "string", "szansa": liczba_0_100}""",
+Format JSON: {"problem": "max 8 slow - nazwa killer flaw", "sms": "string", "call": "string", "email_temat": "string", "email_tresc": "string", "followup1": "string", "followup2": "string", "szansa": liczba_0_100, "odpowiedz_na_opinie": "string lub pusty string"}""",
             user_prompt, ak, 700
         )
         wynik = safe_parse_json(tekst)
@@ -768,7 +770,7 @@ if st.session_state.tryb_modulu == "B2B":
             strata = oblicz_strate_finansowa(f, wer, branza)
             opinie_tekst = pobierz_opinie(f.get("cid",""), SK) if score >= 60 else []
             ai = analiza_claude_b2b(f, branza, AK, wer, score, strata, lok, opinie_tekst)
-            rows.append({"Status": status_leada(score), "Nazwa": f["nazwa"], "Telefon": f["telefon"], "WWW": f["www"], "Adres": f["adres"], "Opinie": f["opinie"], "Ocena Google": f["ocena"], "Ocena strony": wer["ocena_www"], "Technologia": wer["technologia"], "PageSpeed": wer["pagespeed"] if wer["pagespeed"] is not None else "-", "Reklamuje sie": ", ".join(wer["piksele"]) if wer["piksele"] else "NIE", "SSL": "TAK" if wer["ssl"] else "NIE", "Rezerwacja": "TAK" if wer["ma_rezerwacje"] else "NIE", "Problemy WWW": " | ".join(wer["problemy"]) if wer["problemy"] else "OK", "AI Score": score, "Strata/mc (PLN)": strata, "Szansa %": ai.get("szansa",50), "Problem": ai.get("problem",""), "SMS": ai.get("sms",""), "Call": ai.get("call",""), "Email temat": ai.get("email_temat",""), "Email tresc": ai.get("email_tresc",""), "Followup 1": ai.get("followup1",""), "Followup 2": ai.get("followup2","")})
+            rows.append({"Status": status_leada(score), "Nazwa": f["nazwa"], "Telefon": f["telefon"], "WWW": f["www"], "Adres": f["adres"], "Opinie": f["opinie"], "Ocena Google": f["ocena"], "Ocena strony": wer["ocena_www"], "Technologia": wer["technologia"], "PageSpeed": wer["pagespeed"] if wer["pagespeed"] is not None else "-", "Reklamuje sie": ", ".join(wer["piksele"]) if wer["piksele"] else "NIE", "SSL": "TAK" if wer["ssl"] else "NIE", "Rezerwacja": "TAK" if wer["ma_rezerwacje"] else "NIE", "Problemy WWW": " | ".join(wer["problemy"]) if wer["problemy"] else "OK", "AI Score": score, "Strata/mc (PLN)": strata, "Szansa %": ai.get("szansa",50), "Problem": ai.get("problem",""), "SMS": ai.get("sms",""), "Call": ai.get("call",""), "Email temat": ai.get("email_temat",""), "Email tresc": ai.get("email_tresc",""), "Followup 1": ai.get("followup1",""), "Followup 2": ai.get("followup2",""), "Odpowiedz na opinie": ai.get("odpowiedz_na_opinie","")})
         bar.progress(100); msg.empty(); stats_box.empty(); bar.empty()
         if not rows: st.warning("Brak wynikow. Zmien filtry."); st.stop()
         df = pd.DataFrame(rows)
@@ -806,6 +808,9 @@ if st.session_state.tryb_modulu == "B2B":
                     ca, cb = st.columns(2)
                     with ca: st.markdown("**SMS:** (kliknij ikone w prawym gornym rogu, aby skopiowac)"); st.code(row["SMS"], language=None, wrap_lines=True); st.caption("Problem: " + row["Problem"])
                     with cb: st.markdown("**Cold Call:** (kliknij ikone w prawym gornym rogu, aby skopiowac)"); st.code(row["Call"], language=None, wrap_lines=True)
+                    if row["Odpowiedz na opinie"]:
+                        st.markdown("**🎁 Gotowa odpowiedz na negatywna opinie (darmowy prezent dla leada):**")
+                        st.code(row["Odpowiedz na opinie"], language=None, wrap_lines=True)
         with tab3:
             for _, row in df.head(25).iterrows():
                 with st.expander(row["Status"] + " | " + row["Nazwa"] + " | Score: " + str(row["AI Score"]) + "/99"):
