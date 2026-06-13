@@ -387,6 +387,35 @@ WARTOSC_KLIENTA_NISZA = {
     "nieruchomosci": 10000, "deweloper": 20000, "agencja": 2000,
 }
 
+SEZONOWOSC_NISZA = {
+    "dekarz": "listopad-luty (zima - brak prac na dachu)", "dekarstwo": "listopad-luty (zima - brak prac na dachu)",
+    "elewacj": "listopad-marzec (zima - brak prac elewacyjnych)", "ogrodzenia": "listopad-luty (zima)",
+    "fotowoltaika": "listopad-styczen (krotszy dzien, mniej prezentacji)",
+    "klimatyzacja": "pazdziernik-marzec (poza sezonem chlodzenia)",
+    "pompy ciepla": "lipiec-sierpien (przed sezonem grzewczym spada zainteresowanie)",
+    "stomatolog": "lipiec-sierpien (wakacje - pacjenci odkladaja wizyty)",
+    "dentyst": "lipiec-sierpien (wakacje - pacjenci odkladaja wizyty)",
+    "medycyna estetyczna": "grudzien-styczen (po swiatach mniej wydatkow na uslugi)",
+    "fryzjer": "styczen i wrzesien (po swiatach i po wakacjach - spadek wizyt)",
+    "barber": "styczen i wrzesien (po swiatach i po wakacjach - spadek wizyt)",
+    "restauracja": "styczen-luty (po swiatach - ludzie ograniczaja wydatki)",
+    "catering": "styczen-luty (mniej imprez po sezonie swiatecznym)",
+    "hotel": "listopad i marzec (poza sezonem turystycznym)",
+    "nocleg": "listopad i marzec (poza sezonem turystycznym)",
+    "fitness": "styczen-luty pelne zapisy, ale lipiec-sierpien drastyczny spadek (wakacje)",
+    "trener": "lipiec-sierpien (wakacje - spadek klientow)",
+    "siłownia": "lipiec-sierpien (wakacje - spadek klientow)",
+    "detailing": "listopad-luty (zima - mniej dbania o auto)",
+    "wulkanizacja": "maj-wrzesien (poza sezonem zmiany kol - mniej klientow)",
+}
+
+def znajdz_sezonowosc(branza):
+    """Zwraca opis okresu spadku obrotow dla danej niszy, lub pusty string jesli nie znalazl."""
+    branza_l = branza.lower()
+    for klucz, opis in SEZONOWOSC_NISZA.items():
+        if klucz in branza_l: return opis
+    return ""
+
 def oblicz_strate_finansowa(f, wer, branza=""):
     """Szacuje mozliwa miesieczna strate finansowa (PLN) wynikajaca z braku/slabej strony WWW.
     Wartosc jednego klienta zalezy od niszy (np. dekarz ~12000 PLN vs fryzjer ~150 PLN)."""
@@ -433,6 +462,7 @@ def analiza_claude_b2b(f, branza, ak, wer, score, strata=0, lok="", opinie_tekst
             "lekki urgency - konkurencja juz dziala, pytanie czy moga porozmawiac w tym tygodniu",
         ]
         styl_zakonczenia = STYLE_ZAKONCZENIA[hash(f["telefon"] + branza) % len(STYLE_ZAKONCZENIA)]
+        sezonowosc = znajdz_sezonowosc(branza)
         user_prompt = f"""NAZWA FIRMY: {f["nazwa"]}
 NISZA/BRANZA: {branza}
 MIASTO/LOKALIZACJA: {lok}
@@ -445,6 +475,7 @@ SZACOWANA UTRACONA SPRZEDAZ: {strata} PLN miesiecznie (wyliczona na bazie wartos
 STYL OTWARCIA (uzyj tego dla SMS i CALL): {styl_otwarcia}
 STYL ZAKONCZENIA/CTA (uzyj tego dla SMS i CALL): {styl_zakonczenia}
 TRESC OPINII KLIENTOW (jesli dostepne): {chr(10).join("- " + o for o in opinie_tekst) if opinie_tekst else "brak danych"}
+SEZONOWOSC BRANZY (okres spadku obrotow, jesli znany): {sezonowosc if sezonowosc else "nieznana"}
 
 Wygeneruj komunikaty wedlug systemu opisanego w instrukcjach. Zwroc JSON z polami: problem, sms, call, email_temat, email_tresc, followup1, followup2, szansa"""
 
@@ -483,6 +514,8 @@ ZASADA 4.6 - NAZWA FIRMY W TEKSCIE: Jesli odwolujesz sie do nazwy firmy w zdaniu
 ZASADA 4.7 - OPINIE KLIENTOW: Jesli podano TRESC OPINII KLIENTOW, przeskanuj je w poszukiwaniu powtarzajacych sie skarg (np. "nie moglem sie dodzwonic", "brak odpowiedzi na wiadomosc", "ciezko znalezc info o cenach/godzinach"). Jesli znajdziesz konkretna, powtarzajaca sie skarge zwiazana z obecnoscia online/kontaktem, uzyj jej jako dodatkowego, bardzo mocnego argumentu (np. "klienci pisza w opiniach, ze nie mogli sie dodzwonic - to dokladnie to, co strona z formularzem i czatem rozwiazuje"). Jesli opinie nie sa dostepne lub nie zawieraja nic uzytecznego, zignoruj ta zasade.
 
 ZASADA 4.8 - ODPOWIEDZ NA NAJGORSZA OPINIE (FREE GIFT): Jesli w TRESC OPINII KLIENTOW znajduje sie opinia wyraznie negatywna/krytyczna (narzekanie, niezadowolenie), napisz dla niej profesjonalna, empatyczna, deeskalujaca odpowiedz wlasciciela firmy (3-4 zdania, bez przepraszania na kolanach, ton spokojny i profesjonalny, z propozycja kontaktu offline w celu naprawy sytuacji) i zwroc w polu "odpowiedz_na_opinie". Ta odpowiedz to "darmowy prezent" dla leada - ma realna wartosc, zanim cokolwiek kupi, wiec musi byc gotowa do wklejenia 1:1. Jesli nie ma negatywnej opinii w danych, zwroc dla tego pola pusty string "".
+
+ZASADA 4.9 - SEZONOWOSC (URGENCY): Jesli podano SEZONOWOSC BRANZY (okres spadku obrotow), mozesz wykorzystac to jako dodatkowy argument pilnosci w CALL lub FOLLOWUP - np. "zanim wejdziecie w [okres spadku], lepiej miec to dzialajace". Uzywaj tego subtelnie, max raz w calym zestawie wiadomosci, i tylko jesli naturalnie wpisuje sie w kontekst - nie wymuszaj. Jesli sezonowosc "nieznana", zignoruj te zasade.
 
 ZASADA 5 - WSKAZ KONKRETNE ROZWIAZANIE: Nie konczy sie na "mam raport, kiedy zadzwonic" - w SMS/CALL/EMAIL musi byc jasno wskazane, CO konkretnie trzeba zrobic, zeby przestac tracic te pieniadze (np. "wystarczy dodac SSL i przycisk rezerwacji online", "strona potrzebuje wersji mobilnej i formularza kontaktowego"), powiazane z WYKRYTYMI BLEDAMI. To ma brzmiec jak gotowa diagnoza + propozycja, nie tylko zachce do rozmowy.
 
