@@ -323,8 +323,7 @@ def weryfikuj_strone(url):
         elif technologia == "Wlasny kod / nieznana": problemy.append("Przestarzala strona (brak rozpoznanej platformy)")
         piksele = wykryj_piksele(t)
         if not piksele: problemy.append("Brak pikseli reklamowych (nie reklamuja sie online)")
-        pagespeed = pobierz_pagespeed(url)
-        if pagespeed is not None and pagespeed < 50: problemy.append("Wolna strona (PageSpeed " + str(pagespeed) + "/100)")
+        pagespeed = None  # wylaczone - wymaga PAGESPEED_API_KEY, do wlaczenia pozniej
         return {"dziala": True, "ssl": ssl, "ocena_www": max(1, 10-len(problemy)), "problemy": problemy, "ma_rezerwacje": ma_rez, "ma_social": any(x in t for x in ["facebook","instagram","tiktok"]), "technologia": technologia, "piksele": piksele, "pagespeed": pagespeed}
     except: return {"dziala": False, "ssl": False, "ocena_www": 0, "problemy": ["Strona niedostepna"], "ma_rezerwacje": False, "ma_social": False, "technologia": "Niedostepna", "piksele": [], "pagespeed": None}
 
