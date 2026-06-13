@@ -288,8 +288,15 @@ def wykryj_piksele(t):
     """Wykrywa zainstalowane piksele/tagi reklamowe i analityczne na stronie."""
     return [nazwa for nazwa, sygnatury in PIXEL_SYGNATURY if any(s in t for s in sygnatury)]
 
+def pobierz_pagespeed(url):
+    """Zwraca wynik Google PageSpeed Insights (mobile, 0-100) dla danego URL, lub None jesli niedostepny."""
+    try:
+        r = requests.get("https://www.googleapis.com/pagespeedonline/v5/runPagespeed", params={"url": url, "strategy": "mobile", "category": "performance"}, timeout=20)
+        return round(r.json()["lighthouseResult"]["categories"]["performance"]["score"] * 100)
+    except: return None
+
 def weryfikuj_strone(url):
-    if not url or url in ["brak","sprawdz na stronie",""]: return {"dziala": False, "ssl": False, "ocena_www": 0, "problemy": ["Brak strony WWW"], "ma_rezerwacje": False, "ma_social": False, "technologia": "Brak strony", "piksele": []}
+    if not url or url in ["brak","sprawdz na stronie",""]: return {"dziala": False, "ssl": False, "ocena_www": 0, "problemy": ["Brak strony WWW"], "ma_rezerwacje": False, "ma_social": False, "technologia": "Brak strony", "piksele": [], "pagespeed": None}
     try:
         r = requests.get(url, timeout=7, headers={"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)"}, allow_redirects=True)
         ssl = url.startswith("https"); t = r.text.lower(); problemy = []
@@ -306,8 +313,10 @@ def weryfikuj_strone(url):
         elif technologia == "Wlasny kod / nieznana": problemy.append("Przestarzala strona (brak rozpoznanej platformy)")
         piksele = wykryj_piksele(t)
         if not piksele: problemy.append("Brak pikseli reklamowych (nie reklamuja sie online)")
-        return {"dziala": True, "ssl": ssl, "ocena_www": max(1, 10-len(problemy)), "problemy": problemy, "ma_rezerwacje": ma_rez, "ma_social": any(x in t for x in ["facebook","instagram","tiktok"]), "technologia": technologia, "piksele": piksele}
-    except: return {"dziala": False, "ssl": False, "ocena_www": 0, "problemy": ["Strona niedostepna"], "ma_rezerwacje": False, "ma_social": False, "technologia": "Niedostepna", "piksele": []}
+        pagespeed = pobierz_pagespeed(url)
+        if pagespeed is not None and pagespeed < 50: problemy.append("Wolna strona (PageSpeed " + str(pagespeed) + "/100)")
+        return {"dziala": True, "ssl": ssl, "ocena_www": max(1, 10-len(problemy)), "problemy": problemy, "ma_rezerwacje": ma_rez, "ma_social": any(x in t for x in ["facebook","instagram","tiktok"]), "technologia": technologia, "piksele": piksele, "pagespeed": pagespeed}
+    except: return {"dziala": False, "ssl": False, "ocena_www": 0, "problemy": ["Strona niedostepna"], "ma_rezerwacje": False, "ma_social": False, "technologia": "Niedostepna", "piksele": [], "pagespeed": None}
 
 def oblicz_score(f, wer):
     s = 40
@@ -388,6 +397,7 @@ def analiza_claude_b2b(f, branza, ak, wer, score, strata=0, lok=""):
 NISZA/BRANZA: {branza}
 MIASTO/LOKALIZACJA: {lok}
 OCENA STRONY WWW: {wer["ocena_www"]}/10
+SZYBKOSC STRONY (Google PageSpeed, mobile, 0-100): {wer["pagespeed"] if wer["pagespeed"] is not None else "nie sprawdzono"}
 LICZBA OPINII GOOGLE: {f["opinie"]}
 OCENA GOOGLE: {f["ocena"]}
 WYKRYTE BLEDY (killer flaws): {prob_str}
@@ -413,6 +423,7 @@ ZASADA 2 - KILLER FLAW: Zamiast ogolnikow, uderz w KONKRETNY wykryty blad:
 - Brak mobile -> "Strona rozjezdza sie na telefonach, 70% ludzi ucieka po 2 sekundach"
 - Brak WWW -> "Konkurencja zjada klientow, ktorzy szukali Was w Google w tym miesiacu - dla internetu nie istniejecie"
 - Brak rezerwacji online -> "Klienci uciekaja do konkurencji, bo nie moga zapisac sie online o 23:00"
+- Wolny PageSpeed (podana wartosc poniej 50) -> "Strona laduje sie tak dlugo, ze polowa klientow wychodzi zanim sie wczyta - Google ocenia jej szybkosc na podana liczbe punktow ze 100"
 
 ZASADA 3.5 - ROZNORODNOSC OTWARCIA: To wiadomosc jedna z wielu wyslanych masowo - NIE moze brzmiec jak szablon. Otwarcie SMS i CALL MUSI byc zgodne ze wskazanym w danych "STYL OTWARCIA" (rozne dla kazdej firmy). NIE uzywaj schematu "Dzien dobry, czy rozmawiam z wlascicielem X? Dzwonie, bo..." jesli STYL OTWARCIA wskazuje inaczej.
 
@@ -734,12 +745,12 @@ if st.session_state.tryb_modulu == "B2B":
             if bt and f["telefon"] in ["brak","","sprawdz na stronie"]: continue
             if f["opinie"] > mo or f["opinie"] < min_op: continue
             bar.progress(50 + int(40 * i / max(len(wszystkie),1))); msg.info("Analizuje: " + f["nazwa"])
-            wer = weryfikuj_strone(f["www"]) if weryfikuj_www else {"dziala": True, "ssl": False, "ocena_www": 5, "problemy": [], "ma_rezerwacje": False, "ma_social": False, "technologia": "Nie sprawdzano", "piksele": []}
+            wer = weryfikuj_strone(f["www"]) if weryfikuj_www else {"dziala": True, "ssl": False, "ocena_www": 5, "problemy": [], "ma_rezerwacje": False, "ma_social": False, "technologia": "Nie sprawdzano", "piksele": [], "pagespeed": None}
             score = oblicz_score(f, wer)
             if score < min_score: continue
             strata = oblicz_strate_finansowa(f, wer, branza)
             ai = analiza_claude_b2b(f, branza, AK, wer, score, strata, lok)
-            rows.append({"Status": status_leada(score), "Nazwa": f["nazwa"], "Telefon": f["telefon"], "WWW": f["www"], "Adres": f["adres"], "Opinie": f["opinie"], "Ocena Google": f["ocena"], "Ocena strony": wer["ocena_www"], "Technologia": wer["technologia"], "Reklamuje sie": ", ".join(wer["piksele"]) if wer["piksele"] else "NIE", "SSL": "TAK" if wer["ssl"] else "NIE", "Rezerwacja": "TAK" if wer["ma_rezerwacje"] else "NIE", "Problemy WWW": " | ".join(wer["problemy"]) if wer["problemy"] else "OK", "AI Score": score, "Strata/mc (PLN)": strata, "Szansa %": ai.get("szansa",50), "Problem": ai.get("problem",""), "SMS": ai.get("sms",""), "Call": ai.get("call",""), "Email temat": ai.get("email_temat",""), "Email tresc": ai.get("email_tresc",""), "Followup 1": ai.get("followup1",""), "Followup 2": ai.get("followup2","")})
+            rows.append({"Status": status_leada(score), "Nazwa": f["nazwa"], "Telefon": f["telefon"], "WWW": f["www"], "Adres": f["adres"], "Opinie": f["opinie"], "Ocena Google": f["ocena"], "Ocena strony": wer["ocena_www"], "Technologia": wer["technologia"], "PageSpeed": wer["pagespeed"] if wer["pagespeed"] is not None else "-", "Reklamuje sie": ", ".join(wer["piksele"]) if wer["piksele"] else "NIE", "SSL": "TAK" if wer["ssl"] else "NIE", "Rezerwacja": "TAK" if wer["ma_rezerwacje"] else "NIE", "Problemy WWW": " | ".join(wer["problemy"]) if wer["problemy"] else "OK", "AI Score": score, "Strata/mc (PLN)": strata, "Szansa %": ai.get("szansa",50), "Problem": ai.get("problem",""), "SMS": ai.get("sms",""), "Call": ai.get("call",""), "Email temat": ai.get("email_temat",""), "Email tresc": ai.get("email_tresc",""), "Followup 1": ai.get("followup1",""), "Followup 2": ai.get("followup2","")})
         bar.progress(100); msg.empty(); stats_box.empty(); bar.empty()
         if not rows: st.warning("Brak wynikow. Zmien filtry."); st.stop()
         df = pd.DataFrame(rows)
@@ -770,7 +781,7 @@ if st.session_state.tryb_modulu == "B2B":
             with st.expander("📈 Szansa i diagnoza problemu"):
                 st.dataframe(df[["Nazwa","WWW","Szansa %","Problem"]], use_container_width=True, hide_index=True, column_config={"Szansa %": st.column_config.ProgressColumn("Szansa %", min_value=0, max_value=100, format="%d%%")})
             with st.expander("🔍 Szczegoly techniczne (CMS, piksele, SSL, rezerwacje...)"):
-                st.dataframe(df[["Nazwa","Opinie","Ocena Google","Ocena strony","Technologia","Reklamuje sie","SSL","Rezerwacja","Problemy WWW"]], use_container_width=True, hide_index=True, column_config={"Ocena strony": st.column_config.ProgressColumn("Ocena strony", min_value=0, max_value=10, format="%d/10")})
+                st.dataframe(df[["Nazwa","Opinie","Ocena Google","Ocena strony","Technologia","PageSpeed","Reklamuje sie","SSL","Rezerwacja","Problemy WWW"]], use_container_width=True, hide_index=True, column_config={"Ocena strony": st.column_config.ProgressColumn("Ocena strony", min_value=0, max_value=10, format="%d/10")})
         with tab2:
             for _, row in df.head(25).iterrows():
                 with st.expander(row["Status"] + " | " + row["Nazwa"] + " — " + row["Telefon"] + " | Score: " + str(row["AI Score"]) + "/99"):
@@ -802,6 +813,8 @@ if st.session_state.tryb_modulu == "B2B":
 **📣 Reklamuje sie** - czy firma ma zainstalowane piksele reklamowe (Meta Pixel, Google Ads, TikTok Pixel itp.).
 - **Wykryty piksel** = firma juz wydaje pieniadze na reklamy online i rozumie marketing cyfrowy - latwiejszy klient na kampanie/optymalizacje.
 - **"NIE"** = firma nie reklamuje sie online. Mocny argument: "Konkurencja Was retargetuje, a Was nikt nie sciga po stronie - kazdy odwiedzajacy odchodzi na zawsze".
+
+**⚡ PageSpeed** - ocena szybkosci wczytywania strony na telefonie wg Google (0-100). Poniej 50 to mocny sygnal - wolna strona = klienci wychodza zanim sie wczyta.
 
 **🎯 AI Score** - ogolna ocena (0-99) jak dobrym leadem jest ta firma - im wyzej, tym wiekszy potencjal sprzedazowy.
 
