@@ -210,7 +210,7 @@ def safe_parse_json(text):
         return None
 
 # ── HELPER: wywołanie Claude z systemowym promptem ──
-def claude_call(system_prompt, user_prompt, ak, max_tokens=800, model="claude-haiku-4-5"):
+def claude_call(system_prompt, user_prompt, ak, max_tokens=800, model="claude-haiku-4-5", timeout=90):
     """Wywołuje Claude API z system promptem wymuszającym czysty JSON."""
     r = requests.post(
         "https://api.anthropic.com/v1/messages",
@@ -221,7 +221,7 @@ def claude_call(system_prompt, user_prompt, ak, max_tokens=800, model="claude-ha
             "system": system_prompt,
             "messages": [{"role": "user", "content": user_prompt}]
         },
-        timeout=90
+        timeout=timeout
     )
     r.raise_for_status()
     return r.json()["content"][0]["text"]
@@ -585,8 +585,8 @@ WYMAGANIA JAKOSCIOWE (kluczowe - to ma byc NA NAJWYZSZYM POZIOMIE, nie szablon):
 - Pod hero dodaj dyskretny banner: "PODGLAD / MOCKUP - przykladowa wizualizacja nowej strony" w jasnym kolorze.
 - NIE wymyslaj innych danych kontaktowych niz podane. NIE generuj generycznego, "plastikowego" designu - to ma wyglądać jak praca topowego studia.
 
-Odpowiedz WYLACZNIE kodem HTML, zaczynajac od <!DOCTYPE html>, bez markdown, bez komentarzy, bez tekstu przed/po.""",
-        user_prompt, ak, 6000
+Odpowiedz WYLACZNIE kodem HTML, zaczynajac od <!DOCTYPE html>, bez markdown, bez komentarzy, bez tekstu przed/po. WAZNE: kod musi byc KOMPLETNY i zamkniety (</body></html> na koncu) - jesli design jest bardzo bogaty, ogranicz liczbe sekcji/elementow tak, aby cale HTML zmiescilo sie i bylo poprawnie zamkniete.""",
+        user_prompt, ak, max_tokens=8000, model="claude-sonnet-4-6", timeout=180
     )
     html = tekst.strip()
     if html.startswith("```"): html = html.split("\n", 1)[1].rsplit("```", 1)[0]
