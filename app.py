@@ -380,7 +380,7 @@ def analiza_claude_b2b(f, branza, ak, wer, score, strata=0, lok=""):
             "pytanie o najlepszy dzien/godzine kontaktu, bez slowa 'raport' czy 'plan'",
             "propozycja konkretnej godziny ('moge zadzwonic dzis po 16:00?')",
             "pytanie czy odbiorca sam zauwazyl ten problem, zanim zaproponujesz pomoc",
-            "krotka informacja co konkretnie poprawisz + pytanie 'da Pan znac jak zaczac?'",
+            "krotka informacja co konkretnie poprawisz + pytanie 'czy mam dla Pana przygotowac szczegoly?'",
             "lekki urgency - konkurencja juz dziala, pytanie czy moga porozmawiac w tym tygodniu",
         ]
         styl_zakonczenia = STYLE_ZAKONCZENIA[hash(f["telefon"] + branza) % len(STYLE_ZAKONCZENIA)]
