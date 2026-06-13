@@ -989,6 +989,10 @@ if st.session_state.tryb_modulu == "B2B":
         st.session_state.historia.append({"branza": branza, "lok": lok, "wyniki": len(df), "czas": datetime.now().strftime("%H:%M")})
         st.session_state["b2b_df"] = df; st.session_state["b2b_branza"] = branza; st.session_state["b2b_lok"] = lok
 
+    if "b2b_df" not in st.session_state and not go_b2b:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown('<div class="info-box">👆 Wpisz branzę i lokalizację, kliknij "URUCHOM MASOWY SKAN B2B", a po chwili zobaczysz tutaj listę firm ze statusem (HOT/WARM/COLD), AI Score i szacowaną stratą miesięczną - to Twoja gotowa lista do kontaktu wraz z wiadomościami SMS, Cold Call i Email.</div>', unsafe_allow_html=True)
+
     if "b2b_df" in st.session_state:
         df = st.session_state["b2b_df"]; branza = st.session_state["b2b_branza"]; lok = st.session_state["b2b_lok"]
         hot = len(df[df["Status"]=="HOT"]); warm = len(df[df["Status"]=="WARM"])
@@ -1007,9 +1011,9 @@ if st.session_state.tryb_modulu == "B2B":
         st.markdown("<br>", unsafe_allow_html=True)
         tab1,tab2,tab3,tab4,tab5,tab6 = st.tabs(["Tabela wynikow","SMS / Cold Call","Sekwencja Email","TOP 5","Analiza","Eksport"])
         with tab1:
-            st.dataframe(df[["Status","Nazwa","Telefon","AI Score","Strata/mc (PLN)"]], use_container_width=True, hide_index=True, column_config={"AI Score": st.column_config.ProgressColumn("AI Score", min_value=0, max_value=99, format="%d/99"), "Strata/mc (PLN)": st.column_config.NumberColumn("Strata/mc (PLN)", format="%d zl")})
+            st.dataframe(df[["Status","Nazwa","Telefon","AI Score","Strata/mc (PLN)"]], use_container_width=True, hide_index=True, column_config={"Status": st.column_config.TextColumn("Status", help="HOT = gotowy do kontaktu teraz. WARM = warto, ale mniej palace. COLD = niska szansa - pomin lub kontaktuj na koniec."), "AI Score": st.column_config.ProgressColumn("AI Score", min_value=0, max_value=99, format="%d/99", help="Ocena 0-99 jak bardzo ta firma potrzebuje Twoich uslug. Wyzej = wieksza szansa na sprzedaz, zacznij od najwyzszych."), "Strata/mc (PLN)": st.column_config.NumberColumn("Strata/mc (PLN)", format="%d zl", help="Szacowana kwota, ktora firma traci miesiecznie przez problemy ze strona/marketingiem. Twoj glowny argument w rozmowie z leadem.")})
             with st.expander("📈 Szansa i diagnoza problemu"):
-                st.dataframe(df[["Nazwa","WWW","Szansa %","Problem"]], use_container_width=True, hide_index=True, column_config={"Szansa %": st.column_config.ProgressColumn("Szansa %", min_value=0, max_value=100, format="%d%%")})
+                st.dataframe(df[["Nazwa","WWW","Szansa %","Problem"]], use_container_width=True, hide_index=True, column_config={"Szansa %": st.column_config.ProgressColumn("Szansa %", min_value=0, max_value=100, format="%d%%", help="Szacowana szansa, ze ta firma kupi Twoja usluge - na podstawie diagnozy AI."), "Problem": st.column_config.TextColumn("Problem", help="Glowny problem wykryty przez AI - uzyj go jako 'haczyka' w pierwszej rozmowie z leadem.")})
             with st.expander("🔍 Szczegoly techniczne (CMS, piksele, SSL, rezerwacje...)"):
                 st.dataframe(df[["Nazwa","Email","Opinie","Ocena Google","Ocena strony","Technologia","PageSpeed","Reklamuje sie","SSL","Rezerwacja","Problemy WWW"]], use_container_width=True, hide_index=True, column_config={"Ocena strony": st.column_config.ProgressColumn("Ocena strony", min_value=0, max_value=10, format="%d/10")})
         with tab2:
@@ -1145,6 +1149,10 @@ elif st.session_state.tryb_modulu == "MOCKUP":
             st.session_state["mockup_html"] = html
             st.session_state["mockup_nazwa"] = m_nazwa
             st.session_state["mockup_www_obecna"] = m_www_obecna
+
+    if "mockup_html" not in st.session_state:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown('<div class="info-box">👆 Wypełnij dane firmy (im więcej szczegółów - USP, opinie, styl - tym lepszy efekt) i kliknij "Generuj premium mockup". Po chwili zobaczysz tutaj gotową wizualizację nowej strony - jeśli wybrałeś lead ze skanu B2B z aktywną stroną WWW, dostaniesz też porównanie "przed/po" obok siebie, do pokazania klientowi na żywo.</div>', unsafe_allow_html=True)
 
     if "mockup_html" in st.session_state:
         st.markdown("<br>", unsafe_allow_html=True)
