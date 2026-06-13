@@ -128,6 +128,27 @@ if "zalogowany" not in st.session_state: st.session_state.zalogowany = False
 if "kod_info" not in st.session_state: st.session_state.kod_info = None
 if "historia" not in st.session_state: st.session_state.historia = []
 if "tryb_modulu" not in st.session_state: st.session_state.tryb_modulu = "B2B"
+if "onboarding_done" not in st.session_state: st.session_state.onboarding_done = False
+if "onboarding_step" not in st.session_state: st.session_state.onboarding_step = 0
+
+ONBOARDING_KROKI = [
+    {
+        "tytul": "👋 Witaj w AI Lead Gen PRO",
+        "tresc": "Ta aplikacja ma 3 główne moduły:<br><br>🔵 <b>B2B</b> — znajduje lokalne firmy, które potrzebują nowej strony/marketingu, i generuje gotowe wiadomości (SMS, telefon, email) do wysłania.<br><br>🟣 <b>B2C</b> — analizuje rynek dla Twojego produktu/usługi (popyt, konkurencja, głos klienta).<br><br>🎨 <b>Generator Mockupów Premium</b> — tworzy gotową wizualizację nowej strony dla leada, na efekt WOW.<br><br>Przejdziemy szybko po najważniejszych pojęciach (4 kroki, 1 minuta)."
+    },
+    {
+        "tytul": "📊 Tabela wyników B2B — co znaczą kolumny?",
+        "tresc": "Po skanie B2B w zakładce <b>Tabela wynikow</b> zobaczysz m.in.:<br><br>• <b>Status</b> (HOT/WARM/COLD) — jak gorący jest lead.<br>• <b>AI Score</b> — ocena 0-99, im wyżej tym większa szansa na sprzedaż.<br>• <b>Strata/mc (PLN)</b> — ile firma realnie traci miesięcznie przez problemy ze stroną/marketingiem — to Twój główny argument w rozmowie.<br><br>Pełny słownik wszystkich pojęć (Technologia, PageSpeed, RODO, Szansa % itd.) znajdziesz w zakładce <b>Analiza</b> po wykonaniu skanu."
+    },
+    {
+        "tytul": "✉️ Gotowe wiadomości",
+        "tresc": "W zakładkach <b>SMS / Cold Call</b> i <b>Sekwencja Email</b> masz gotowe, spersonalizowane treści wygenerowane przez AI na podstawie realnych danych leada (opinie, sezonowość, problemy ze stroną).<br><br>Możesz je skopiować jednym kliknięciem i wysłać bez edycji — ale warto przeczytać i dopasować ton do siebie."
+    },
+    {
+        "tytul": "🎨 Generator Mockupów Premium",
+        "tresc": "W module <b>Generator Mockupów Premium</b> wypełniasz krótki formularz (USP firmy, oferta, opinie, styl) i AI generuje kompletną, premium wizualizację nowej strony — możesz ją pokazać leadowi na żywo (porównanie 'przed/po' jeśli wybierzesz lead ze skanu) albo wysłać jako plik HTML.<br><br>To gotowe — możesz zaczynać! W każdej chwili wrócisz do tego przewodnika klikając <b>'❓ Jak korzystać z aplikacji'</b> w panelu po lewej."
+    },
+]
 
 if not st.session_state.zalogowany:
     st.markdown('<div class="login-card"><div style="font-family:Space Grotesk,sans-serif;font-size:1.8rem;font-weight:700;color:#0f172a;margin-bottom:.5rem">🔥 AI Lead Gen PRO</div><div style="font-size:.9rem;color:#94a3b8;margin-bottom:2rem">Automatyczny skaner B2B + B2C z analizą Claude AI<br>Wpisz swój kod dostępu aby kontynuować</div></div>', unsafe_allow_html=True)
@@ -148,6 +169,27 @@ if not st.session_state.zalogowany:
                 else:
                     st.error(f"❌ {komunikat}")
         st.markdown('<div style="text-align:center;font-size:.8rem;color:#94a3b8;margin-top:1rem">Nie masz kodu? <a href="#" style="color:#2563eb">Kup dostęp za 97 zł/miesiąc</a></div>', unsafe_allow_html=True)
+    st.stop()
+
+if not st.session_state.onboarding_done:
+    krok = ONBOARDING_KROKI[st.session_state.onboarding_step]
+    ob_l, ob_c, ob_r = st.columns([1, 2, 1])
+    with ob_c:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown(f'<div class="login-card" style="text-align:left;max-width:560px"><div style="font-family:Space Grotesk,sans-serif;font-size:1.3rem;font-weight:700;color:#0f172a;margin-bottom:1rem">{krok["tytul"]}</div><div style="font-size:.92rem;color:#475569;line-height:1.7">{krok["tresc"]}</div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="text-align:center;font-size:.8rem;color:#94a3b8;margin-bottom:1rem">Krok {st.session_state.onboarding_step + 1} / {len(ONBOARDING_KROKI)}</div>', unsafe_allow_html=True)
+        ob_btn1, ob_btn2 = st.columns(2)
+        with ob_btn1:
+            if st.button("Pomiń przewodnik", use_container_width=True):
+                st.session_state.onboarding_done = True; st.rerun()
+        with ob_btn2:
+            etykieta = "Zaczynajmy →" if st.session_state.onboarding_step == len(ONBOARDING_KROKI) - 1 else "Dalej →"
+            if st.button(etykieta, type="primary", use_container_width=True):
+                if st.session_state.onboarding_step == len(ONBOARDING_KROKI) - 1:
+                    st.session_state.onboarding_done = True
+                else:
+                    st.session_state.onboarding_step += 1
+                st.rerun()
     st.stop()
 
 info = st.session_state.kod_info
@@ -845,6 +887,9 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### Tryb lokalizacji")
     tryb_lok = st.radio("Wybierz tryb", ["Konkretne miasto", "Gmina / Powiat", "Wojewodztwo", "Kod pocztowy"])
+    st.markdown("---")
+    if st.button("❓ Jak korzystać z aplikacji", use_container_width=True):
+        st.session_state.onboarding_done = False; st.session_state.onboarding_step = 0; st.rerun()
     st.markdown("---")
     if st.button("Wyloguj sie", use_container_width=True):
         st.session_state.zalogowany = False; st.session_state.kod_info = None; st.session_state.historia = []; st.rerun()
