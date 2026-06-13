@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import json
+import re
 from datetime import datetime, date
 
 st.set_page_config(page_title="AI Lead Gen PRO", layout="wide", page_icon="🔥")
@@ -305,8 +306,32 @@ def pobierz_pagespeed(url):
         return round(r.json()["lighthouseResult"]["categories"]["performance"]["score"] * 100)
     except: return None
 
+EMAIL_REGEX = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
+EMAIL_WYKLUCZ = ("png","jpg","jpeg","gif","svg","webp","example.com","domain.com","wixpress.com","sentry.io")
+
+def znajdz_emaile(t):
+    """Wyszukuje adresy e-mail w tekscie HTML, odfiltrowujac smieci (pliki graficzne, placeholdery)."""
+    znalezione = set()
+    for m in EMAIL_REGEX.findall(t):
+        m = m.lower().strip(".")
+        if not any(x in m for x in EMAIL_WYKLUCZ): znalezione.add(m)
+    return znalezione
+
+def wyszukaj_email_glebo(base_url, t):
+    """Szuka emaila na stronie glownej, a jesli nie znajdzie - probuje podstron Kontakt/O nas."""
+    emaile = znajdz_emaile(t)
+    if emaile: return emaile
+    for podstrona in ["kontakt", "contact", "o-nas", "about"]:
+        try:
+            link = base_url.rstrip("/") + "/" + podstrona
+            r2 = requests.get(link, timeout=5, headers={"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)"}, allow_redirects=True)
+            emaile = znajdz_emaile(r2.text.lower())
+            if emaile: return emaile
+        except: continue
+    return emaile
+
 def weryfikuj_strone(url):
-    if not url or url in ["brak","sprawdz na stronie",""]: return {"dziala": False, "ssl": False, "ocena_www": 0, "problemy": ["Brak strony WWW"], "ma_rezerwacje": False, "ma_social": False, "technologia": "Brak strony", "piksele": [], "pagespeed": None}
+    if not url or url in ["brak","sprawdz na stronie",""]: return {"dziala": False, "ssl": False, "ocena_www": 0, "problemy": ["Brak strony WWW"], "ma_rezerwacje": False, "ma_social": False, "technologia": "Brak strony", "piksele": [], "pagespeed": None, "email": ""}
     try:
         r = requests.get(url, timeout=7, headers={"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)"}, allow_redirects=True)
         ssl = url.startswith("https"); t = r.text.lower(); problemy = []
@@ -328,8 +353,10 @@ def weryfikuj_strone(url):
         if "cookie" not in t:
             problemy.append("Brak informacji o cookies")
         pagespeed = None  # wylaczone - wymaga PAGESPEED_API_KEY, do wlaczenia pozniej
-        return {"dziala": True, "ssl": ssl, "ocena_www": max(1, 10-len(problemy)), "problemy": problemy, "ma_rezerwacje": ma_rez, "ma_social": any(x in t for x in ["facebook","instagram","tiktok"]), "technologia": technologia, "piksele": piksele, "pagespeed": pagespeed}
-    except: return {"dziala": False, "ssl": False, "ocena_www": 0, "problemy": ["Strona niedostepna"], "ma_rezerwacje": False, "ma_social": False, "technologia": "Niedostepna", "piksele": [], "pagespeed": None}
+        emaile = wyszukaj_email_glebo(url, t)
+        email = sorted(emaile)[0] if emaile else ""
+        return {"dziala": True, "ssl": ssl, "ocena_www": max(1, 10-len(problemy)), "problemy": problemy, "ma_rezerwacje": ma_rez, "ma_social": any(x in t for x in ["facebook","instagram","tiktok"]), "technologia": technologia, "piksele": piksele, "pagespeed": pagespeed, "email": email}
+    except: return {"dziala": False, "ssl": False, "ocena_www": 0, "problemy": ["Strona niedostepna"], "ma_rezerwacje": False, "ma_social": False, "technologia": "Niedostepna", "piksele": [], "pagespeed": None, "email": ""}
 
 def oblicz_score(f, wer):
     s = 40
@@ -764,13 +791,13 @@ if st.session_state.tryb_modulu == "B2B":
             if bt and f["telefon"] in ["brak","","sprawdz na stronie"]: continue
             if f["opinie"] > mo or f["opinie"] < min_op: continue
             bar.progress(50 + int(40 * i / max(len(wszystkie),1))); msg.info("Analizuje: " + f["nazwa"])
-            wer = weryfikuj_strone(f["www"]) if weryfikuj_www else {"dziala": True, "ssl": False, "ocena_www": 5, "problemy": [], "ma_rezerwacje": False, "ma_social": False, "technologia": "Nie sprawdzano", "piksele": [], "pagespeed": None}
+            wer = weryfikuj_strone(f["www"]) if weryfikuj_www else {"dziala": True, "ssl": False, "ocena_www": 5, "problemy": [], "ma_rezerwacje": False, "ma_social": False, "technologia": "Nie sprawdzano", "piksele": [], "pagespeed": None, "email": ""}
             score = oblicz_score(f, wer)
             if score < min_score: continue
             strata = oblicz_strate_finansowa(f, wer, branza)
             opinie_tekst = pobierz_opinie(f.get("cid",""), SK) if score >= 60 else []
             ai = analiza_claude_b2b(f, branza, AK, wer, score, strata, lok, opinie_tekst)
-            rows.append({"Status": status_leada(score), "Nazwa": f["nazwa"], "Telefon": f["telefon"], "WWW": f["www"], "Adres": f["adres"], "Opinie": f["opinie"], "Ocena Google": f["ocena"], "Ocena strony": wer["ocena_www"], "Technologia": wer["technologia"], "PageSpeed": wer["pagespeed"] if wer["pagespeed"] is not None else "-", "Reklamuje sie": ", ".join(wer["piksele"]) if wer["piksele"] else "NIE", "SSL": "TAK" if wer["ssl"] else "NIE", "Rezerwacja": "TAK" if wer["ma_rezerwacje"] else "NIE", "Problemy WWW": " | ".join(wer["problemy"]) if wer["problemy"] else "OK", "AI Score": score, "Strata/mc (PLN)": strata, "Szansa %": ai.get("szansa",50), "Problem": ai.get("problem",""), "SMS": ai.get("sms",""), "Call": ai.get("call",""), "Email temat": ai.get("email_temat",""), "Email tresc": ai.get("email_tresc",""), "Followup 1": ai.get("followup1",""), "Followup 2": ai.get("followup2",""), "Odpowiedz na opinie": ai.get("odpowiedz_na_opinie","")})
+            rows.append({"Status": status_leada(score), "Nazwa": f["nazwa"], "Telefon": f["telefon"], "WWW": f["www"], "Adres": f["adres"], "Opinie": f["opinie"], "Ocena Google": f["ocena"], "Ocena strony": wer["ocena_www"], "Technologia": wer["technologia"], "PageSpeed": wer["pagespeed"] if wer["pagespeed"] is not None else "-", "Email": wer["email"] if wer["email"] else "brak", "Reklamuje sie": ", ".join(wer["piksele"]) if wer["piksele"] else "NIE", "SSL": "TAK" if wer["ssl"] else "NIE", "Rezerwacja": "TAK" if wer["ma_rezerwacje"] else "NIE", "Problemy WWW": " | ".join(wer["problemy"]) if wer["problemy"] else "OK", "AI Score": score, "Strata/mc (PLN)": strata, "Szansa %": ai.get("szansa",50), "Problem": ai.get("problem",""), "SMS": ai.get("sms",""), "Call": ai.get("call",""), "Email temat": ai.get("email_temat",""), "Email tresc": ai.get("email_tresc",""), "Followup 1": ai.get("followup1",""), "Followup 2": ai.get("followup2",""), "Odpowiedz na opinie": ai.get("odpowiedz_na_opinie","")})
         bar.progress(100); msg.empty(); stats_box.empty(); bar.empty()
         if not rows: st.warning("Brak wynikow. Zmien filtry."); st.stop()
         df = pd.DataFrame(rows)
@@ -801,7 +828,7 @@ if st.session_state.tryb_modulu == "B2B":
             with st.expander("📈 Szansa i diagnoza problemu"):
                 st.dataframe(df[["Nazwa","WWW","Szansa %","Problem"]], use_container_width=True, hide_index=True, column_config={"Szansa %": st.column_config.ProgressColumn("Szansa %", min_value=0, max_value=100, format="%d%%")})
             with st.expander("🔍 Szczegoly techniczne (CMS, piksele, SSL, rezerwacje...)"):
-                st.dataframe(df[["Nazwa","Opinie","Ocena Google","Ocena strony","Technologia","PageSpeed","Reklamuje sie","SSL","Rezerwacja","Problemy WWW"]], use_container_width=True, hide_index=True, column_config={"Ocena strony": st.column_config.ProgressColumn("Ocena strony", min_value=0, max_value=10, format="%d/10")})
+                st.dataframe(df[["Nazwa","Email","Opinie","Ocena Google","Ocena strony","Technologia","PageSpeed","Reklamuje sie","SSL","Rezerwacja","Problemy WWW"]], use_container_width=True, hide_index=True, column_config={"Ocena strony": st.column_config.ProgressColumn("Ocena strony", min_value=0, max_value=10, format="%d/10")})
         with tab2:
             for _, row in df.head(25).iterrows():
                 with st.expander(row["Status"] + " | " + row["Nazwa"] + " — " + row["Telefon"] + " | Score: " + str(row["AI Score"]) + "/99"):
