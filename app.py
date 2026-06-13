@@ -3,6 +3,8 @@ import pandas as pd
 import requests
 import json
 import re
+import io
+import zipfile
 from datetime import datetime, date
 
 st.set_page_config(page_title="AI Lead Gen PRO", layout="wide", page_icon="🔥")
@@ -543,55 +545,95 @@ Format JSON: {"problem": "max 8 slow - nazwa killer flaw", "sms": "string", "cal
     except:
         return FALLBACK
 
+def _strip_code_fence(tekst):
+    html = tekst.strip()
+    if html.startswith("```"): html = html.split("\n", 1)[1].rsplit("```", 1)[0]
+    return html.strip()
+
 def generuj_mockup_premium(d, ak):
-    """Generuje premium, w pelni spersonalizowany mockup strony na podstawie danych zebranych w wizardzie."""
-    user_prompt = f"""NAZWA FIRMY: {d["nazwa"]}
+    """Generuje premium, wielostronicowy mockup strony (kilka realnych podstron + dzialajaca nawigacja)."""
+    kontekst = f"""NAZWA FIRMY: {d["nazwa"]}
 BRANZA/NISZA: {d["branza"]}
 MIASTO/ADRES: {d["adres"]}
 TELEFON: {d["telefon"]}
 EMAIL: {d.get("email","")}
 
-WYROZNIK FIRMY (USP) - to ma byc glowny przekaz hero sekcji: {d["usp"]}
+WYROZNIK FIRMY (USP): {d["usp"]}
 
-OFERTA/USLUGI (uwzglednij w sekcji usług, z cenami jesli podane):
+OFERTA/USLUGI (z cenami jesli podane):
 {d["oferta"]}
 
-NAJLEPSZE OPINIE KLIENTOW (uzyj jako social proof, mozesz delikatnie skrocic, ale zachowaj sens i ton):
-{d["opinie"] if d["opinie"] else "brak - wymysl 2 realistyczne, pozytywne opinie dopasowane do branzy"}
+NAJLEPSZE OPINIE KLIENTOW:
+{d["opinie"] if d["opinie"] else "brak - wymysl 2-3 realistyczne, pozytywne opinie dopasowane do branzy"}
 
 STYL WIZUALNY: {d["styl"]}
 KOLOR DOMINUJACY: {d["kolor"]}
 GLOWNY CEL STRONY (najwazniejsze CTA): {d["cel"]}
+DODATKOWE ELEMENTY: {", ".join(d["elementy"]) if d["elementy"] else "brak"}"""
 
-DODATKOWE SEKCJE DO UWZGLEDNIENIA: {", ".join(d["elementy"]) if d["elementy"] else "brak dodatkowych - tylko standardowe"}
+    elementy = d["elementy"]
+    pages = [("index", "Strona główna"), ("o-nas", "O nas")]
+    pages.append(("uslugi", "Cennik" if "Cennik" in elementy else "Usługi"))
+    if "Galeria zdjęć" in elementy or "Before/After" in elementy: pages.append(("galeria", "Galeria"))
+    pages.append(("opinie", "Opinie"))
+    if "FAQ" in elementy: pages.append(("faq", "FAQ"))
+    pages.append(("kontakt", "Kontakt"))
 
-Wygeneruj kompletny, samodzielny plik HTML (jeden plik, CSS inline w <style> w <head>, bez zewnetrznych zaleznosci poza Google Fonts) - strona ma robic efekt WOW i wyglądać lepiej niz 95% stron lokalnych firm w tej branzy."""
+    nav_html = "".join(f'<a href="{slug}.html">{label}</a>\n' for slug, label in pages)
 
-    tekst = claude_call(
-        """Jestes jednym z najlepszych na swiecie web designerow/UX, specjalizujesz sie w stronach-wizytowkach dla lokalnych firm, ktore maja jeden cel: zachwycic wlasciciela firmy na pierwszy rzut oka (efekt WOW) i maksymalizowac konwersje (telefon/rezerwacja/kontakt).
+    template_prompt = f"""{kontekst}
 
-Generujesz JEDEN kompletny plik HTML - to MOCKUP wysylany potencjalnemu klientowi PRZED podpisaniem umowy, ma sprawic, ze klient pomysli "chce taka strone, ile to kosztuje?".
+LISTA PODSTRON I PLIKOW (uzyj DOKLADNIE tych nazw plikow w nawigacji, w tej kolejnosci):
+{chr(10).join(f"- {slug}.html -> {label}" for slug, label in pages)}
 
-WYMAGANIA JAKOSCIOWE (kluczowe - to ma byc NA NAJWYZSZYM POZIOMIE, nie szablon):
-- Jeden plik HTML, CSS inline w <style> w <head>, zero zewnetrznych JS/CSS (Google Fonts link OK).
-- Pelna responsywnosc (mobile-first), subtelne animacje/transitions (hover, fade-in przy scrollu via CSS), nowoczesny premium design.
-- Hero sekcja musi byc oparta na podanym USP firmy - nie generyczny slogan, a konkretny powod "dlaczego ja, a nie konkurencja".
-- Sekcja uslug/oferty z DANYCH WEJSCIOWYCH (nie wymyslaj innej oferty), estetyczne karty/grid.
-- Sekcja social proof z PODANYMI OPINIAMI (jesli sa) - wyeksponowane wizualnie (gwiazdki, cytaty, ladne karty).
-- Sekcja kontakt z PRAWDZIWYMI danymi (adres, telefon, email) + wyraznie CTA zgodne z "GLOWNY CEL STRONY".
-- Zastosuj podany STYL WIZUALNY i KOLOR DOMINUJACY konsekwentnie w calej stronie (tla, akcenty, przyciski).
-- Jesli podano DODATKOWE SEKCJE (np. galeria, FAQ, cennik, mapa, before/after, certyfikaty) - dodaj je estetycznie, dopasowane do branzy.
-- NAWIGACJA MUSI DZIALAC: kazdy link w menu (<a href="#cos">) musi odpowiadac istniejacemu elementowi z atrybutem id="cos" w odpowiedniej sekcji (np. <section id="cennik">). Sprawdz, ze WSZYSTKIE linki w nav maja swoj odpowiednik id w dokumencie - to jest mockup jednostronicowy (one-page), wiec nawigacja to plynne przewijanie do sekcji.
-- Zdjecia: uzyj placeholderow https://picsum.photos/seed/{losowy-tekst}/{szerokosc}/{wysokosc} (rozne seedy).
-- Pod hero dodaj dyskretny banner: "PODGLAD / MOCKUP - przykladowa wizualizacja nowej strony" w jasnym kolorze.
-- NIE wymyslaj innych danych kontaktowych niz podane. NIE generuj generycznego, "plastikowego" designu - to ma wyglądać jak praca topowego studia.
+Wygeneruj WSPOLNY SZABLON (header z logo+nawigacja, <style> z calym CSS, footer) dla calej, wielostronicowej witryny tej firmy. To jest mockup realnej, wielostronicowej strony WWW - kazda podstrona bedzie osobnym plikiem .html i bedzie uzywac tego samego szablonu."""
 
-Odpowiedz WYLACZNIE kodem HTML, zaczynajac od <!DOCTYPE html>, bez markdown, bez komentarzy, bez tekstu przed/po. WAZNE: kod musi byc KOMPLETNY i zamkniety (</body></html> na koncu) - jesli design jest bardzo bogaty, ogranicz liczbe sekcji/elementow tak, aby cale HTML zmiescilo sie i bylo poprawnie zamkniete.""",
-        user_prompt, ak, max_tokens=8000, model="claude-sonnet-4-6", timeout=180
+    template = claude_call(
+        """Jestes jednym z najlepszych na swiecie web designerow/UX. Tworzysz WSPOLNY SZABLON HTML dla wielostronicowej, premium strony-wizytowki lokalnej firmy (mockup wysylany potencjalnemu klientowi - ma robic efekt WOW).
+
+WYMAGANIA:
+- Caly CSS w <style> w <head> (Google Fonts link OK, zero innych zewnetrznych zaleznosci), nowoczesny premium design, pelna responsywnosc (mobile-first), subtelne animacje/transitions.
+- Zastosuj podany STYL WIZUALNY i KOLOR DOMINUJACY konsekwentnie (tla, akcenty, przyciski).
+- <body> ma zawierac: dyskretny banner na samej gorze "PODGLAD / MOCKUP - przykladowa wizualizacja nowej strony" w jasnym kolorze, nastepnie <header> z logo firmy i nawigacja <nav> zawierajaca DOKLADNIE podane linki (kazdy <a> z dokladnym href z listy plikow i podpisem z listy), nastepnie placeholder `<!--CONTENT-->` na osobnej linii, na koniec <footer> z danymi firmy (adres, telefon, email) i copyrightem.
+- AKTYWNA STRONA: dodaj do kazdego <a> w nav atrybut data-page="nazwa_bez_.html" (np. data-page="index") - posluzy do oznaczenia aktywnej podstrony przez prosty JS.
+- Dodaj na koniec <body>, PO `<!--CONTENT-->` i footerze, mala <script> ktory dodaje klase "active" do linku <a> w nav, ktorego data-page odpowiada nazwie aktualnego pliku (window.location.pathname), oraz prosty CSS dla .active (np. inny kolor/podkreslenie) - to ma dzialac przy otwieraniu plikow lokalnie (file://).
+
+Odpowiedz WYLACZNIE kodem HTML zaczynajac od <!DOCTYPE html>, bez markdown, bez komentarzy. Kod musi byc kompletny i zamkniety (</html> na koncu), z dokladnie jednym wystapieniem `<!--CONTENT-->`.""",
+        template_prompt, ak, max_tokens=4000, model="claude-sonnet-4-6", timeout=120
     )
-    html = tekst.strip()
-    if html.startswith("```"): html = html.split("\n", 1)[1].rsplit("```", 1)[0]
-    return html
+    template = _strip_code_fence(template)
+    if "<!--CONTENT-->" not in template:
+        template = template.replace("</body>", "<!--CONTENT-->\n</body>")
+
+    pliki = {}
+    for slug, label in pages:
+        opis_strony = {
+            "index": "Strona glowna: hero oparty na USP firmy (konkretny powod 'dlaczego ja a nie konkurencja'), krotkie highlighty oferty, skrocone social proof (1 opinia), wyrazne CTA zgodne z GLOWNYM CELEM STRONY.",
+            "o-nas": "Podstrona 'O nas': historia/charakter firmy, doswiadczenie, wartosci, zdjecia zespolu/wnetrza (placeholdery), nawiazanie do USP.",
+            "uslugi": "Podstrona z PELNA oferta usług z DANYCH WEJSCIOWYCH (nie wymyslaj innej oferty), estetyczne karty/grid" + (", z cenami w formie cennika" if "Cennik" in elementy else "") + ".",
+            "galeria": "Podstrona galeria: grid zdjec z realizacji (placeholdery picsum z roznymi seedami)" + (", w tym sekcja Before/After (przed/po) jesli ma sens dla branzy" if "Before/After" in elementy else "") + ".",
+            "opinie": "Podstrona z opiniami klientow - wyeksponowane wizualnie (gwiazdki, cytaty, karty), uzyj PODANYCH OPINII.",
+            "faq": "Podstrona FAQ - 5-6 najczestszych pytan i odpowiedzi dopasowanych do branzy.",
+            "kontakt": "Podstrona kontakt: PRAWDZIWE dane (adres, telefon, email), wyrazne CTA zgodne z GLOWNYM CELEM STRONY" + (", placeholder mapy (np. szary div z opisem 'Mapa Google')" if "Mapa / lokalizacja" in elementy else "") + ".",
+        }[slug]
+
+        page_prompt = f"""{kontekst}
+
+Wygeneruj TRESC (sekcje HTML) dla podstrony "{label}" ({slug}.html).
+ZADANIE TEJ PODSTRONY: {opis_strony}
+
+To ma byc fragment HTML, ktory zostanie wstawiony w miejsce `<!--CONTENT-->` we wspolnym szablonie strony (ktory zawiera juz <style>, header z nawigacja i footer - NIE powtarzaj ich). Zdjecia: uzyj placeholderow https://picsum.photos/seed/{{losowy-tekst}}/{{szerokosc}}/{{wysokosc}} (rozne seedy). NIE wymyslaj danych kontaktowych innych niz podane."""
+
+        content = claude_call(
+            "Jestes elitarnym web designerem/copywriterem. Generujesz WYLACZNIE fragment HTML (sekcje <section> itp.) tresci jednej podstrony premium mockupu strony lokalnej firmy - ma byc szczegolowy, dopasowany do branzy, robic efekt WOW i wspierac konwersje. Odpowiedz WYLACZNIE kodem HTML fragmentu (bez <html>/<head>/<style>/<body>/nawigacji/footera), bez markdown, bez komentarzy, bez tekstu przed/po.",
+            page_prompt, ak, max_tokens=4000, model="claude-sonnet-4-6", timeout=120
+        )
+        content = _strip_code_fence(content)
+        html = template.replace("<!--CONTENT-->", content)
+        html = html.replace("<title>", "<title>" + label + " - ", 1) if "<title>" in html else html
+        pliki[slug + ".html"] = html
+
+    return pliki
 
 # ── FUNKCJE B2C ──
 def serper_search(query, sk, num=10):
@@ -1032,16 +1074,25 @@ elif st.session_state.tryb_modulu == "MOCKUP":
             st.error("Podaj przynajmniej nazwę firmy i branżę.")
         else:
             dane_mockup = {"nazwa": m_nazwa, "branza": m_branza, "adres": m_adres, "telefon": m_telefon, "email": m_email, "usp": m_usp, "oferta": m_oferta, "opinie": m_opinie, "styl": m_styl, "kolor": m_kolor, "cel": m_cel, "elementy": m_elementy}
-            with st.spinner("Generuję premium mockup dla " + m_nazwa + "... to może potrwać chwilę"):
-                html = generuj_mockup_premium(dane_mockup, AK)
-            st.session_state["mockup_html"] = html
+            with st.spinner("Generuję premium mockup (kilka podstron) dla " + m_nazwa + "... to może potrwać minutę"):
+                pliki = generuj_mockup_premium(dane_mockup, AK)
+            st.session_state["mockup_pliki"] = pliki
             st.session_state["mockup_nazwa"] = m_nazwa
 
-    if "mockup_html" in st.session_state:
+    if "mockup_pliki" in st.session_state:
+        pliki = st.session_state["mockup_pliki"]
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("**Podgląd: " + st.session_state["mockup_nazwa"] + "**")
-        st.components.v1.html(st.session_state["mockup_html"], height=700, scrolling=True)
-        st.download_button("⬇️ Pobierz plik HTML (do wysłania klientowi)", st.session_state["mockup_html"].encode("utf-8"), file_name="mockup_" + st.session_state["mockup_nazwa"].replace(" ","_") + ".html", mime="text/html", use_container_width=True)
+        podstrony = list(pliki.keys())
+        wybrana_podstrona = st.selectbox("Podgląd podstrony", podstrony, format_func=lambda s: s.replace(".html",""))
+        st.markdown("**Podgląd: " + st.session_state["mockup_nazwa"] + " — " + wybrana_podstrona.replace(".html","") + "**")
+        st.components.v1.html(pliki[wybrana_podstrona], height=700, scrolling=True)
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for nazwa_pliku, zawartosc in pliki.items():
+                zf.writestr(nazwa_pliku, zawartosc)
+        st.download_button("⬇️ Pobierz całą stronę (ZIP - wszystkie podstrony)", buf.getvalue(), file_name="mockup_" + st.session_state["mockup_nazwa"].replace(" ","_") + ".zip", mime="application/zip", use_container_width=True)
+        st.caption("Rozpakuj ZIP i otwórz index.html — nawigacja między podstronami działa po rozpakowaniu (otwarcie ZIP-u w przeglądarce bez rozpakowania nie zadziała).")
 
 # ══════════════════════════════════════════
 # MODUL B2C
