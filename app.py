@@ -323,6 +323,10 @@ def weryfikuj_strone(url):
         elif technologia == "Wlasny kod / nieznana": problemy.append("Przestarzala strona (brak rozpoznanej platformy)")
         piksele = wykryj_piksele(t)
         if not piksele: problemy.append("Brak pikseli reklamowych (nie reklamuja sie online)")
+        if not any(x in t for x in ["polityka prywatnosci", "polityka prywatności", "privacy policy", "rodo", "gdpr"]):
+            problemy.append("Brak polityki prywatnosci/RODO")
+        if "cookie" not in t:
+            problemy.append("Brak informacji o cookies")
         pagespeed = None  # wylaczone - wymaga PAGESPEED_API_KEY, do wlaczenia pozniej
         return {"dziala": True, "ssl": ssl, "ocena_www": max(1, 10-len(problemy)), "problemy": problemy, "ma_rezerwacje": ma_rez, "ma_social": any(x in t for x in ["facebook","instagram","tiktok"]), "technologia": technologia, "piksele": piksele, "pagespeed": pagespeed}
     except: return {"dziala": False, "ssl": False, "ocena_www": 0, "problemy": ["Strona niedostepna"], "ma_rezerwacje": False, "ma_social": False, "technologia": "Niedostepna", "piksele": [], "pagespeed": None}
@@ -434,6 +438,7 @@ ZASADA 2 - KILLER FLAW: Zamiast ogolnikow, uderz w KONKRETNY wykryty blad:
 - Brak WWW -> "Konkurencja zjada klientow, ktorzy szukali Was w Google w tym miesiacu - dla internetu nie istniejecie"
 - Brak rezerwacji online -> "Klienci uciekaja do konkurencji, bo nie moga zapisac sie online o 23:00"
 - Wolny PageSpeed (podana wartosc poniej 50) -> "Strona laduje sie tak dlugo, ze polowa klientow wychodzi zanim sie wczyta - Google ocenia jej szybkosc na podana liczbe punktow ze 100"
+- Brak polityki prywatnosci/RODO lub brak informacji o cookies -> "Strona narusza unijne przepisy RODO/Omnibus, za co grozi kara administracyjna do 20 000 zl - to ryzyko prawne, nie tylko marketingowe, ktore trzeba pilnie naprawic"
 
 ZASADA 3.5 - ROZNORODNOSC OTWARCIA: To wiadomosc jedna z wielu wyslanych masowo - NIE moze brzmiec jak szablon. Otwarcie SMS i CALL MUSI byc zgodne ze wskazanym w danych "STYL OTWARCIA" (rozne dla kazdej firmy). NIE uzywaj schematu "Dzien dobry, czy rozmawiam z wlascicielem X? Dzwonie, bo..." jesli STYL OTWARCIA wskazuje inaczej.
 
@@ -829,6 +834,8 @@ if st.session_state.tryb_modulu == "B2B":
 - **"NIE"** = firma nie reklamuje sie online. Mocny argument: "Konkurencja Was retargetuje, a Was nikt nie sciga po stronie - kazdy odwiedzajacy odchodzi na zawsze".
 
 **⚡ PageSpeed** - ocena szybkosci wczytywania strony na telefonie wg Google (0-100). Poniej 50 to mocny sygnal - wolna strona = klienci wychodza zanim sie wczyta.
+
+**⚖️ Brak polityki prywatnosci/RODO/cookies** - strona moze naruszac przepisy RODO i Omnibus, za co grozi kara administracyjna do 20 000 zl. To mocny, prawny argument - strach przed kara konwertuje lepiej niz obietnica zysku.
 
 **🎯 AI Score** - ogolna ocena (0-99) jak dobrym leadem jest ta firma - im wyzej, tym wiekszy potencjal sprzedazowy.
 
