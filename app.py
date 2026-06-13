@@ -291,7 +291,9 @@ def wykryj_piksele(t):
 def pobierz_pagespeed(url):
     """Zwraca wynik Google PageSpeed Insights (mobile, 0-100) dla danego URL, lub None jesli niedostepny."""
     try:
-        r = requests.get("https://www.googleapis.com/pagespeedonline/v5/runPagespeed", params={"url": url, "strategy": "mobile", "category": "performance"}, timeout=20)
+        params = {"url": url, "strategy": "mobile", "category": "performance"}
+        if "PAGESPEED_API_KEY" in st.secrets: params["key"] = st.secrets["PAGESPEED_API_KEY"]
+        r = requests.get("https://www.googleapis.com/pagespeedonline/v5/runPagespeed", params=params, timeout=20)
         return round(r.json()["lighthouseResult"]["categories"]["performance"]["score"] * 100)
     except: return None
 
