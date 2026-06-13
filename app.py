@@ -548,6 +548,42 @@ def _strip_code_fence(tekst):
     if html.startswith("```"): html = html.split("\n", 1)[1].rsplit("```", 1)[0]
     return html.strip()
 
+NAV_SCRIPT = """
+<script>
+(function(){
+  function offsetTop(el){
+    var header = document.querySelector('header');
+    var hh = header ? header.getBoundingClientRect().height : 0;
+    return el.getBoundingClientRect().top + window.pageYOffset - hh - 10;
+  }
+  function goTo(id){
+    var el = document.getElementById(id);
+    if(!el) return;
+    window.scrollTo({top: Math.max(offsetTop(el), 0), behavior: 'smooth'});
+  }
+  document.addEventListener('click', function(e){
+    var a = e.target.closest('a[href^="#"]');
+    if(!a) return;
+    var id = a.getAttribute('href').slice(1);
+    if(!id || !document.getElementById(id)) return;
+    e.preventDefault();
+    goTo(id);
+  });
+  window.addEventListener('load', function(){
+    if(location.hash){
+      setTimeout(function(){ goTo(location.hash.slice(1)); }, 300);
+    }
+  });
+})();
+</script>
+"""
+
+def _inject_nav_script(html):
+    """Dokleja deterministyczny (niezalezny od AI) skrypt nawigacji #anchor z kompensacja wysokosci stickly header."""
+    if "</body>" in html:
+        return html.replace("</body>", NAV_SCRIPT + "</body>")
+    return html + NAV_SCRIPT
+
 def generuj_mockup_premium(d, ak):
     """Generuje premium, jednostronicowy mockup (Tailwind CSS, dark mode) - jeden blok HTML do live preview."""
     user_prompt = f"""NAZWA FIRMY: {d["nazwa"]}
@@ -597,7 +633,7 @@ TRESC I STRUKTURA:
 Odpowiedz WYLACZNIE kodem HTML, zaczynajac od <!DOCTYPE html>, bez markdown, bez komentarzy, bez tekstu przed/po. Kod musi byc KOMPLETNY i zamkniety (</body></html> na koncu).""",
         user_prompt, ak, max_tokens=8000, model="claude-sonnet-4-6", timeout=180
     )
-    return _strip_code_fence(tekst)
+    return _inject_nav_script(_strip_code_fence(tekst))
 
 # ── FUNKCJE B2C ──
 def serper_search(query, sk, num=10):
