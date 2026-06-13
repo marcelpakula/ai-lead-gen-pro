@@ -1058,12 +1058,27 @@ elif st.session_state.tryb_modulu == "MOCKUP":
     st.markdown('<div class="info-box">Wypełnij dane firmy poniżej — im więcej szczegółów (USP, opinie, styl), tym lepszy i bardziej spersonalizowany mockup. To ma być najwyższy poziom jaki możemy wygenerować, nie szablon.</div>', unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
 
+    m_www_obecna = ""
+    if "b2b_df" in st.session_state:
+        df_leady = st.session_state["b2b_df"]
+        wybor_leada = st.selectbox("Wybierz lead ze skanu B2B (opcjonalnie - uzupełni dane i pokaże porównanie przed/po)", ["-- wpisz dane recznie --"] + df_leady["Nazwa"].tolist())
+        if wybor_leada != "-- wpisz dane recznie --":
+            wiersz_leada = df_leady[df_leady["Nazwa"] == wybor_leada].iloc[0]
+            m_www_obecna = wiersz_leada["WWW"] if str(wiersz_leada["WWW"]).startswith("http") else ""
+        st.markdown("<br>", unsafe_allow_html=True)
+    else:
+        wybor_leada = "-- wpisz dane recznie --"
+
+    domyslna_nazwa = wiersz_leada["Nazwa"] if wybor_leada != "-- wpisz dane recznie --" else ""
+    domyslny_adres = wiersz_leada["Adres"] if wybor_leada != "-- wpisz dane recznie --" else ""
+    domyslny_telefon = wiersz_leada["Telefon"] if wybor_leada != "-- wpisz dane recznie --" else ""
+
     mcol1, mcol2 = st.columns(2)
     with mcol1:
-        m_nazwa = st.text_input("Nazwa firmy", placeholder="np. Salon Fryzjerski Verona")
+        m_nazwa = st.text_input("Nazwa firmy", value=domyslna_nazwa, placeholder="np. Salon Fryzjerski Verona")
         m_branza = st.text_input("Branża / nisza", placeholder="np. Salon fryzjerski")
-        m_adres = st.text_input("Adres / miasto", placeholder="np. ul. Kwiatowa 5, Kraków")
-        m_telefon = st.text_input("Telefon", placeholder="np. 600 100 200")
+        m_adres = st.text_input("Adres / miasto", value=domyslny_adres, placeholder="np. ul. Kwiatowa 5, Kraków")
+        m_telefon = st.text_input("Telefon", value=domyslny_telefon, placeholder="np. 600 100 200")
         m_email = st.text_input("Email (opcjonalnie)", placeholder="np. kontakt@firma.pl")
     with mcol2:
         m_styl = st.selectbox("Styl wizualny", ["Luksusowy / elegancki", "Minimalistyczny", "Energiczny / kolorowy", "Klasyczny / rzemieślniczy", "Industrialny / surowy", "Naturalny / eco"])
@@ -1084,11 +1099,23 @@ elif st.session_state.tryb_modulu == "MOCKUP":
                 html = generuj_mockup_premium(dane_mockup, AK)
             st.session_state["mockup_html"] = html
             st.session_state["mockup_nazwa"] = m_nazwa
+            st.session_state["mockup_www_obecna"] = m_www_obecna
 
     if "mockup_html" in st.session_state:
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("**Live preview: " + st.session_state["mockup_nazwa"] + "**")
-        st.components.v1.html(st.session_state["mockup_html"], height=800, scrolling=True)
+        www_obecna = st.session_state.get("mockup_www_obecna", "")
+        if www_obecna:
+            pcol1, pcol2 = st.columns(2)
+            with pcol1:
+                st.markdown("**🔴 PRZED — obecna strona** (" + www_obecna + ")")
+                st.components.v1.iframe(www_obecna, height=800, scrolling=True)
+            with pcol2:
+                st.markdown("**🟢 PO — premium mockup AI**")
+                st.components.v1.html(st.session_state["mockup_html"], height=800, scrolling=True)
+            st.caption("Jeśli obecna strona nie wyświetla się po lewej, niektóre witryny blokują wyświetlanie w ramce (X-Frame-Options) — to nie błąd aplikacji.")
+        else:
+            st.markdown("**Live preview: " + st.session_state["mockup_nazwa"] + "**")
+            st.components.v1.html(st.session_state["mockup_html"], height=800, scrolling=True)
         st.download_button("⬇️ Pobierz plik HTML (do wysłania klientowi)", st.session_state["mockup_html"].encode("utf-8"), file_name="mockup_" + st.session_state["mockup_nazwa"].replace(" ","_") + ".html", mime="text/html", use_container_width=True)
 
 # ══════════════════════════════════════════
