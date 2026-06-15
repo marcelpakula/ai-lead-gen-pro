@@ -1114,9 +1114,13 @@ elif st.session_state.tryb_modulu == "MOCKUP":
         if wybor_leada != "-- wpisz dane recznie --":
             wiersz_leada = df_leady[df_leady["Nazwa"] == wybor_leada].iloc[0]
             m_www_obecna = wiersz_leada["WWW"] if str(wiersz_leada["WWW"]).startswith("http") else ""
+            m_lead_argumenty = {"strata": wiersz_leada["Strata/mc (PLN)"], "problem": wiersz_leada["Problem"], "ocena_www": wiersz_leada["Ocena strony"], "problemy_www": wiersz_leada["Problemy WWW"], "ma_www": m_www_obecna != ""}
+        else:
+            m_lead_argumenty = None
         st.markdown("<br>", unsafe_allow_html=True)
     else:
         wybor_leada = "-- wpisz dane recznie --"
+        m_lead_argumenty = None
 
     domyslna_nazwa = wiersz_leada["Nazwa"] if wybor_leada != "-- wpisz dane recznie --" else ""
     domyslny_adres = wiersz_leada["Adres"] if wybor_leada != "-- wpisz dane recznie --" else ""
@@ -1149,6 +1153,7 @@ elif st.session_state.tryb_modulu == "MOCKUP":
             st.session_state["mockup_html"] = html
             st.session_state["mockup_nazwa"] = m_nazwa
             st.session_state["mockup_www_obecna"] = m_www_obecna
+            st.session_state["mockup_argumenty"] = m_lead_argumenty
 
     if "mockup_html" not in st.session_state:
         st.markdown("<br>", unsafe_allow_html=True)
@@ -1157,6 +1162,16 @@ elif st.session_state.tryb_modulu == "MOCKUP":
     if "mockup_html" in st.session_state:
         st.markdown("<br>", unsafe_allow_html=True)
         www_obecna = st.session_state.get("mockup_www_obecna", "")
+        argumenty = st.session_state.get("mockup_argumenty")
+        if argumenty:
+            strata = int(argumenty["strata"]) if argumenty["strata"] else 0
+            if not argumenty["ma_www"]:
+                st.markdown(f'<div class="warning-box" style="padding:1.2rem"><div style="font-size:.95rem;font-weight:700;color:#92400e">💡 Argument sprzedażowy: brak własnej strony WWW</div><div style="font-size:.88rem;color:#92400e;margin-top:.4rem">Ta firma nie ma własnej strony — klienci szukający w Google trafiają do konkurencji. Szacowana strata: <b>{strata:,} zł/mc</b>. Pokaż im ten mockup jako realny przykład tego, co tracą.</div></div>'.replace(",", " "), unsafe_allow_html=True)
+            else:
+                problemy = argumenty["problemy_www"] if argumenty["problemy_www"] and argumenty["problemy_www"] != "OK" else argumenty["problem"]
+                ocena = argumenty["ocena_www"]
+                st.markdown(f'<div class="warning-box" style="padding:1.2rem"><div style="font-size:.95rem;font-weight:700;color:#92400e">💡 Argument sprzedażowy: obecna strona jest słaba</div><div style="font-size:.88rem;color:#92400e;margin-top:.4rem">Ocena obecnej strony: <b>{ocena}/10</b>. Problemy: <b>{problemy}</b>. Szacowana strata przez te braki: <b>{strata:,} zł/mc</b>. Mockup po prawej pokazuje, jak strona mogłaby wyglądać i działać.</div></div>'.replace(",", " "), unsafe_allow_html=True)
+            st.markdown("<br>", unsafe_allow_html=True)
         if www_obecna:
             pcol1, pcol2 = st.columns(2)
             with pcol1:
