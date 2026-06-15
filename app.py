@@ -888,6 +888,7 @@ with st.sidebar:
     st.markdown("### Tryb lokalizacji")
     tryb_lok = st.radio("Wybierz tryb", ["Konkretne miasto", "Gmina / Powiat", "Wojewodztwo", "Kod pocztowy"])
     st.markdown("---")
+    st.link_button("📝 Ankieta po testach", "https://docs.google.com/forms/d/e/1FAIpQLSeP4_s2PEVT4hlDNnFCMaXONwJnpM98M53maGYqlxp3k0mXKA/viewform?usp=publish-editor", use_container_width=True)
     if st.button("❓ Jak korzystać z aplikacji", use_container_width=True):
         st.session_state.onboarding_done = False; st.session_state.onboarding_step = 0; st.rerun()
     st.markdown("---")
