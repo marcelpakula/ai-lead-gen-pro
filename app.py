@@ -372,6 +372,27 @@ def wyszukaj_email_glebo(base_url, t):
         except: continue
     return emaile
 
+def szukaj_email_google(nazwa, adres, sk):
+    """Fallback: szuka emaila firmy przez Google gdy nie ma strony lub email nie byl na stronie."""
+    if not sk: return ""
+    try:
+        miasto = adres.split(",")[-1].strip() if "," in adres else adres
+        query = f'"{nazwa}" {miasto} email kontakt'
+        r = requests.post(
+            "https://google.serper.dev/search",
+            headers={"X-API-KEY": sk, "Content-Type": "application/json"},
+            json={"q": query, "gl": "pl", "hl": "pl", "num": 5},
+            timeout=10
+        )
+        tekst = " ".join([
+            item.get("snippet", "") + " " + item.get("title", "")
+            for item in r.json().get("organic", [])
+        ]).lower()
+        emaile = znajdz_emaile(tekst)
+        return sorted(emaile)[0] if emaile else ""
+    except:
+        return ""
+
 def weryfikuj_strone(url):
     if not url or url in ["brak","sprawdz na stronie",""]: return {"dziala": False, "ssl": False, "ocena_www": 0, "problemy": ["Brak strony WWW"], "ma_rezerwacje": False, "ma_social": False, "technologia": "Brak strony", "piksele": [], "pagespeed": None, "email": ""}
     try:
@@ -972,6 +993,8 @@ if st.session_state.tryb_modulu == "B2B":
             if f["opinie"] > mo or f["opinie"] < min_op: continue
             bar.progress(50 + int(40 * i / max(len(wszystkie),1))); msg.info("Analizuje: " + f["nazwa"])
             wer = weryfikuj_strone(f["www"]) if weryfikuj_www else {"dziala": True, "ssl": False, "ocena_www": 5, "problemy": [], "ma_rezerwacje": False, "ma_social": False, "technologia": "Nie sprawdzano", "piksele": [], "pagespeed": None, "email": ""}
+            if not wer["email"]:
+                wer["email"] = szukaj_email_google(f["nazwa"], f["adres"], SK)
             score = oblicz_score(f, wer)
             if score < min_score: continue
             strata = oblicz_strate_finansowa(f, wer, branza)
