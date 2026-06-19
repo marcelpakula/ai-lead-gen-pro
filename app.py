@@ -393,33 +393,156 @@ def szukaj_email_google(nazwa, adres, sk):
     except:
         return ""
 
-def weryfikuj_strone(url):
-    if not url or url in ["brak","sprawdz na stronie",""]: return {"dziala": False, "ssl": False, "ocena_www": 0, "problemy": ["Brak strony WWW"], "ma_rezerwacje": False, "ma_social": False, "technologia": "Brak strony", "piksele": [], "pagespeed": None, "email": ""}
+# Domeny-katalogi i social media — firma może je podać zamiast własnej strony
+KATALOGI_DOMEN = (
+    "facebook.com", "fb.com", "instagram.com", "olx.pl", "targeo.pl",
+    "panoramafirm.pl", "pkt.pl", "zumi.pl", "mapa.targeo.pl", "google.com",
+    "maps.google", "goo.gl", "linkedin.com", "youtube.com", "tiktok.com",
+    "wix.com", "allegro.pl", "yelp.com", "tripadvisor.com", "booksy.com",
+    "just-eat.pl", "pyszne.pl", "uber", "glovo",
+)
+
+KATALOGI_GOOGLE_FALLBACK = (
+    "panoramafirm.pl", "pkt.pl", "zumi.pl", "targeo.pl", "facebook.com",
+    "instagram.com", "olx.pl", "linkedin.com", "aleo.com", "firmy.net",
+    "katalogfirm.pl", "nip.biz.pl", "rejestr.io", "biznes.gov.pl",
+    "google.com", "maps.google",
+)
+
+UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+
+def _wynik_brak(powod="Brak strony WWW"):
+    return {"ma_strone": False, "dziala": False, "ssl": False, "ocena_www": 0,
+            "problemy": [powod], "ma_rezerwacje": False, "ma_social": False,
+            "technologia": "Brak strony", "piksele": [], "pagespeed": None, "email": ""}
+
+def _wynik_ma_strone(url, t):
+    """Analizuje strone ktora juz wiemy ze istnieje i odpowiada 200."""
+    ssl = url.startswith("https")
+    problemy = []
+    if not ssl: problemy.append("Brak SSL")
+    if "viewport" not in t: problemy.append("Brak mobile")
+    if not any(x in t for x in ["form","kontakt","contact"]): problemy.append("Brak formularza")
+    if not any(x in t for x in ["facebook","instagram","tiktok"]): problemy.append("Brak social media")
+    if len(t) < 2000: problemy.append("Uboga tresc")
+    if not any(x in t for x in ["cena","cennik","price"]): problemy.append("Brak cennika")
+    ma_rez = any(x in t for x in ["booksy","calendly","rezerwacja","booking"])
+    if not ma_rez: problemy.append("Brak rezerwacji online")
+    technologia = wykryj_technologie(t)
+    if technologia in ["Wix", "Squarespace", "Strikingly"]: problemy.append("Slaba platforma (" + technologia + ")")
+    elif technologia == "Wlasny kod / nieznana": problemy.append("Przestarzala strona (brak rozpoznanej platformy)")
+    piksele = wykryj_piksele(t)
+    if not piksele: problemy.append("Brak pikseli reklamowych (nie reklamuja sie online)")
+    if not any(x in t for x in ["polityka prywatnosci", "polityka prywatności", "privacy policy", "rodo", "gdpr"]):
+        problemy.append("Brak polityki prywatnosci/RODO")
+    if "cookie" not in t: problemy.append("Brak informacji o cookies")
+    emaile = wyszukaj_email_glebo(url, t)
+    email = sorted(emaile)[0] if emaile else ""
+    return {"ma_strone": True, "dziala": True, "ssl": ssl,
+            "ocena_www": max(1, 10 - len(problemy)), "problemy": problemy,
+            "ma_rezerwacje": ma_rez,
+            "ma_social": any(x in t for x in ["facebook","instagram","tiktok"]),
+            "technologia": technologia, "piksele": piksele, "pagespeed": None, "email": email}
+
+def _jest_katalogiem(url):
+    return any(k in url.lower() for k in KATALOGI_DOMEN)
+
+def _sprawdz_http(url):
+    """Zwraca (True, html) jesli strona odpowiada 2xx/3xx i ma tresc, (False, '') jesli nie."""
     try:
-        r = requests.get(url, timeout=7, headers={"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)"}, allow_redirects=True)
-        ssl = url.startswith("https"); t = r.text.lower(); problemy = []
-        if not ssl: problemy.append("Brak SSL")
-        if "viewport" not in t: problemy.append("Brak mobile")
-        if not any(x in t for x in ["form","kontakt","contact"]): problemy.append("Brak formularza")
-        if not any(x in t for x in ["facebook","instagram","tiktok"]): problemy.append("Brak social media")
-        if len(t) < 2000: problemy.append("Uboga tresc")
-        if not any(x in t for x in ["cena","cennik","price"]): problemy.append("Brak cennika")
-        ma_rez = any(x in t for x in ["booksy","calendly","rezerwacja","booking"])
-        if not ma_rez: problemy.append("Brak rezerwacji online")
-        technologia = wykryj_technologie(t)
-        if technologia in ["Wix", "Squarespace", "Strikingly"]: problemy.append("Slaba platforma (" + technologia + ")")
-        elif technologia == "Wlasny kod / nieznana": problemy.append("Przestarzala strona (brak rozpoznanej platformy)")
-        piksele = wykryj_piksele(t)
-        if not piksele: problemy.append("Brak pikseli reklamowych (nie reklamuja sie online)")
-        if not any(x in t for x in ["polityka prywatnosci", "polityka prywatności", "privacy policy", "rodo", "gdpr"]):
-            problemy.append("Brak polityki prywatnosci/RODO")
-        if "cookie" not in t:
-            problemy.append("Brak informacji o cookies")
-        pagespeed = None  # wylaczone - wymaga PAGESPEED_API_KEY, do wlaczenia pozniej
-        emaile = wyszukaj_email_glebo(url, t)
-        email = sorted(emaile)[0] if emaile else ""
-        return {"dziala": True, "ssl": ssl, "ocena_www": max(1, 10-len(problemy)), "problemy": problemy, "ma_rezerwacje": ma_rez, "ma_social": any(x in t for x in ["facebook","instagram","tiktok"]), "technologia": technologia, "piksele": piksele, "pagespeed": pagespeed, "email": email}
-    except: return {"dziala": False, "ssl": False, "ocena_www": 0, "problemy": ["Strona niedostepna"], "ma_rezerwacje": False, "ma_social": False, "technologia": "Niedostepna", "piksele": [], "pagespeed": None, "email": ""}
+        r = requests.get(url, timeout=5, headers={"User-Agent": UA},
+                         allow_redirects=True,
+                         verify=False)  # verify=False bo interesuje nas ISTNIENIE, nie cert
+        if r.status_code < 400 and len(r.text) > 200:
+            return True, r.text.lower()
+        return False, ""
+    except (requests.exceptions.ConnectionError,
+            requests.exceptions.Timeout,
+            requests.exceptions.TooManyRedirects,
+            requests.exceptions.RequestException):
+        return False, ""
+
+def _google_znajdz_strone(nazwa, adres, sk):
+    """
+    Sprawdza czy firma ma strone przez Google Search.
+    Zwraca (True, url) jesli znaleziono wlasna strone, (False, '') jesli nie.
+    """
+    if not sk:
+        return False, ""
+    try:
+        miasto = adres.split(",")[-1].strip() if "," in adres else adres
+        query = f"{nazwa} {miasto}"
+        r = requests.post(
+            "https://google.serper.dev/search",
+            headers={"X-API-KEY": sk, "Content-Type": "application/json"},
+            json={"q": query, "gl": "pl", "hl": "pl", "num": 3},
+            timeout=10
+        )
+        r.raise_for_status()
+        wyniki = r.json().get("organic", [])[:3]
+        # Slowa kluczowe z nazwy firmy (min 4 znaki) do dopasowania domeny
+        slowa = [s.lower() for s in re.split(r"[\s\-–—/.,]+", nazwa) if len(s) >= 4]
+        for wynik in wyniki:
+            link = wynik.get("link", "").lower()
+            if not link:
+                continue
+            # Jesli wynik to katalog/social – ignoruj
+            if any(k in link for k in KATALOGI_GOOGLE_FALLBACK):
+                continue
+            # Jesli domena zawiera fragment nazwy firmy – to prawdopodobnie ich strona
+            try:
+                from urllib.parse import urlparse
+                domena = urlparse(link).netloc.replace("www.", "")
+            except Exception:
+                domena = link
+            if any(s in domena for s in slowa if s):
+                return True, link
+        return False, ""
+    except (requests.exceptions.RequestException, Exception):
+        return False, ""
+
+def weryfikuj_strone(url, nazwa="", adres="", sk=None):
+    """
+    Dwuetapowa weryfikacja czy firma NA PEWNO nie ma strony.
+    Krok 1: sprawdz URL z Google Maps (jesli istnieje).
+    Krok 2: jesli brak URL lub to katalog — szukaj przez Google Search.
+    Przepuszcza lead dalej tylko jesli OBA kroki nie znalazly strony.
+    """
+    url_czysty = (url or "").strip()
+    brak_url = not url_czysty or url_czysty in ("brak", "sprawdz na stronie", "")
+
+    # KROK 1: mamy URL z Google Maps
+    if not brak_url:
+        if _jest_katalogiem(url_czysty):
+            # To katalog/social, nie wlasna strona — zapisz ale szukaj dalej przez Google
+            pass
+        else:
+            # Prawdziwy URL — sprawdz czy odpowiada
+            istnieje, html = _sprawdz_http(url_czysty)
+            if istnieje:
+                # Firma MA strone — odrzucamy jako lead (zwracamy ma_strone=True)
+                return _wynik_ma_strone(url_czysty, html)
+            else:
+                # URL podany ale nie odpowiada — moze strona padla, moze zly link
+                # Robimy Google fallback zanim uznamy ze nie ma strony
+                pass
+
+    # KROK 2: Google Search fallback (dla braku URL i dla katalogow/padlych stron)
+    if sk and (brak_url or _jest_katalogiem(url_czysty)):
+        ma_strone, znaleziony_url = _google_znajdz_strone(nazwa, adres, sk)
+        if ma_strone:
+            # Google znalazl strone firmy — odrzucamy leada
+            return _wynik_ma_strone(znaleziony_url, "")
+    elif sk and not brak_url:
+        # URL istnial ale nie odpowiadal HTTP — jeden dodatkowy sprawdzian przez Google
+        ma_strone, znaleziony_url = _google_znajdz_strone(nazwa, adres, sk)
+        if ma_strone:
+            istnieje, html = _sprawdz_http(znaleziony_url)
+            if istnieje:
+                return _wynik_ma_strone(znaleziony_url, html)
+
+    # OBA kroki nie znalazly strony — to prawdziwy lead bez WWW
+    return _wynik_brak("Brak strony WWW")
 
 def oblicz_score(f, wer):
     s = 40
@@ -992,7 +1115,13 @@ if st.session_state.tryb_modulu == "B2B":
             if bt and f["telefon"] in ["brak","","sprawdz na stronie"]: continue
             if f["opinie"] > mo or f["opinie"] < min_op: continue
             bar.progress(50 + int(40 * i / max(len(wszystkie),1))); msg.info("Analizuje: " + f["nazwa"])
-            wer = weryfikuj_strone(f["www"]) if weryfikuj_www else {"dziala": True, "ssl": False, "ocena_www": 5, "problemy": [], "ma_rezerwacje": False, "ma_social": False, "technologia": "Nie sprawdzano", "piksele": [], "pagespeed": None, "email": ""}
+            if weryfikuj_www:
+                wer = weryfikuj_strone(f["www"], nazwa=f["nazwa"], adres=f["adres"], sk=SK)
+                # Jesli weryfikacja wykazala ze firma MA strone — pomijamy leada
+                if wer.get("ma_strone"):
+                    continue
+            else:
+                wer = {"ma_strone": False, "dziala": True, "ssl": False, "ocena_www": 5, "problemy": [], "ma_rezerwacje": False, "ma_social": False, "technologia": "Nie sprawdzano", "piksele": [], "pagespeed": None, "email": ""}
             if not wer["email"]:
                 wer["email"] = szukaj_email_google(f["nazwa"], f["adres"], SK)
             score = oblicz_score(f, wer)
