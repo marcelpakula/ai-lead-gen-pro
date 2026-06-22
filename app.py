@@ -285,11 +285,21 @@ def generuj_zapytania_b2b(branza, lok, ak, tryb):
 
 def jest_sieciowka(nazwa): return any(s in nazwa.lower() for s in SIECIOWKI)
 
-def szukaj_maps(q, sk, limit=10):
-    try:
-        r = requests.post("https://google.serper.dev/maps", headers={"X-API-KEY": sk, "Content-Type": "application/json"}, json={"q": q, "gl": "pl", "hl": "pl", "num": limit}, timeout=12)
-        return [{"nazwa": p.get("title","?"), "telefon": p.get("phoneNumber","brak"), "www": p.get("website","brak"), "opinie": p.get("ratingCount",0), "ocena": p.get("rating",0), "adres": p.get("address","?"), "kategoria": p.get("category",""), "cid": p.get("cid","")} for p in r.json().get("places",[])]
-    except: return []
+def szukaj_maps(q, sk, limit=20):
+    """Pobiera wyniki z Google Maps przez Serper. Serper zwraca max 20 per strone — dla wiekszych limitow laczy strony."""
+    def _strona(page):
+        try:
+            payload = {"q": q, "gl": "pl", "hl": "pl", "num": min(limit, 20)}
+            if page > 1:
+                payload["page"] = page
+            r = requests.post("https://google.serper.dev/maps", headers={"X-API-KEY": sk, "Content-Type": "application/json"}, json=payload, timeout=12)
+            return [{"nazwa": p.get("title","?"), "telefon": p.get("phoneNumber","brak"), "www": p.get("website","brak"), "opinie": p.get("ratingCount",0), "ocena": p.get("rating",0), "adres": p.get("address","?"), "kategoria": p.get("category",""), "cid": p.get("cid","")} for p in r.json().get("places",[])]
+        except:
+            return []
+    wyniki = _strona(1)
+    if limit > 20 and len(wyniki) == 20:
+        wyniki += _strona(2)
+    return wyniki[:limit]
 
 def pobierz_opinie(cid, sk, limit=5):
     """Pobiera ostatnie opinie Google dla firmy (po cid) - uzywane do wzbogacenia analizy HOT/WARM leadow."""
@@ -1016,7 +1026,7 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### Ustawienia B2B")
     tryb_skanu = st.radio("Tryb skanu", ["Szybki (1 zapytanie)", "Sredni (3 zapytania)", "Masowy (6 zapytan AUTO)"])
-    mf = st.slider("Max firm per zapytanie", 5, 20, 10)
+    mf = st.slider("Max firm per zapytanie", 5, 50, 20)
     zrodla = st.multiselect("Zrodla", ["Google Maps", "Google Web"], default=["Google Maps"])
     st.markdown("---")
     st.markdown("### Filtry B2B")
