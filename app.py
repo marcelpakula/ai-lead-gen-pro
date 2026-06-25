@@ -1114,28 +1114,36 @@ if st.session_state.tryb_modulu == "B2B":
             stats_box.info("Zebrano " + str(len(wszystkie)) + " firm...")
         bar.progress(50); msg.info("Weryfikuje " + str(len(wszystkie)) + " firm...")
         rows = []
+        diag = {"serper": len(wszystkie), "sieciowki": 0, "telefon": 0, "opinie": 0, "ma_strone": 0, "score": 0}
         for i, f in enumerate(wszystkie):
-            if wykl and jest_sieciowka(f["nazwa"]): continue
-            if bt and f["telefon"] in ["brak","","sprawdz na stronie"]: continue
-            if f["opinie"] > mo or f["opinie"] < min_op: continue
+            if wykl and jest_sieciowka(f["nazwa"]): diag["sieciowki"] += 1; continue
+            if bt and f["telefon"] in ["brak","","sprawdz na stronie"]: diag["telefon"] += 1; continue
+            if f["opinie"] > mo or f["opinie"] < min_op: diag["opinie"] += 1; continue
             bar.progress(50 + int(40 * i / max(len(wszystkie),1))); msg.info("Analizuje: " + f["nazwa"])
             if weryfikuj_www:
                 wer = weryfikuj_strone(f["www"], nazwa=f["nazwa"], adres=f["adres"], sk=SK)
                 if wer.get("ma_strone"):
-                    continue
+                    diag["ma_strone"] += 1; continue
             else:
                 wer = {"ma_strone": False, "dziala": True, "ssl": False, "ocena_www": 5, "problemy": [], "ma_rezerwacje": False, "ma_social": False, "technologia": "Nie sprawdzano", "piksele": [], "pagespeed": None, "email": ""}
             if not wer["email"]:
                 wer["email"] = szukaj_email_google(f["nazwa"], f["adres"], SK)
             score = oblicz_score(f, wer)
-            if score < min_score: continue
+            if score < min_score: diag["score"] += 1; continue
             strata = oblicz_strate_finansowa(f, wer, branza)
             opinie_tekst = pobierz_opinie(f.get("cid",""), SK) if score >= 60 else []
             ai = analiza_claude_b2b(f, branza, AK, wer, score, strata, lok, opinie_tekst)
             google_check_url = "https://www.google.com/search?q=" + requests.utils.quote(f["nazwa"] + " " + f["adres"].split(",")[-1].strip())
             rows.append({"Status": status_leada(score), "Nazwa": f["nazwa"], "Telefon": f["telefon"], "WWW": f["www"], "Adres": f["adres"], "Opinie": f["opinie"], "Ocena Google": f["ocena"], "Ocena strony": wer["ocena_www"], "Technologia": wer["technologia"], "PageSpeed": wer["pagespeed"] if wer["pagespeed"] is not None else "-", "Email": wer["email"] if wer["email"] else "brak", "Reklamuje sie": ", ".join(wer["piksele"]) if wer["piksele"] else "NIE", "SSL": "TAK" if wer["ssl"] else "NIE", "Rezerwacja": "TAK" if wer["ma_rezerwacje"] else "NIE", "Problemy WWW": " | ".join(wer["problemy"]) if wer["problemy"] else "OK", "AI Score": score, "Strata/mc (PLN)": strata, "Szansa %": ai.get("szansa",50), "Problem": ai.get("problem",""), "SMS": ai.get("sms",""), "Call": ai.get("call",""), "Email temat": ai.get("email_temat",""), "Email tresc": ai.get("email_tresc",""), "Followup 1": ai.get("followup1",""), "Followup 2": ai.get("followup2",""), "Odpowiedz na opinie": ai.get("odpowiedz_na_opinie",""), "Google Check": google_check_url})
         bar.progress(100); msg.empty(); stats_box.empty(); bar.empty()
-        if not rows: st.warning("Brak wynikow. Zmien filtry."); st.stop()
+        if not rows:
+            st.warning(f"Brak wynikow. Zmien filtry.")
+            st.info(f"📊 Diagnoza: Serper zwrócił **{diag['serper']}** firm → "
+                    f"sieciówki: **{diag['sieciowki']}** → brak tel: **{diag['telefon']}** → "
+                    f"opinie poza zakresem: **{diag['opinie']}** → "
+                    f"ma stronę (odrzucone): **{diag['ma_strone']}** → "
+                    f"zbyt niski score: **{diag['score']}** → wyników: **0**")
+            st.stop()
         df = pd.DataFrame(rows)
         if sort == "AI Score": df = df.sort_values("AI Score", ascending=False)
         elif sort == "Najmniej opinii": df = df.sort_values("Opinie", ascending=True)
