@@ -537,16 +537,11 @@ def weryfikuj_strone(url, nazwa="", adres="", sk=None):
                 # Robimy Google fallback zanim uznamy ze nie ma strony
                 pass
 
-    # KROK 2: Google Search fallback (dla braku URL i dla katalogow/padlych stron)
+    # KROK 2: Google Search fallback — tylko dla firm bez URL lub z katalogiem
+    # Wymaga POTWIERDZENIA HTTP zanim odrzucimy leada (anti-false-positive)
     if sk and (brak_url or _jest_katalogiem(url_czysty)):
         ma_strone, znaleziony_url = _google_znajdz_strone(nazwa, adres, sk)
-        if ma_strone:
-            # Google znalazl strone firmy — odrzucamy leada
-            return _wynik_ma_strone(znaleziony_url, "")
-    elif sk and not brak_url:
-        # URL istnial ale nie odpowiadal HTTP — jeden dodatkowy sprawdzian przez Google
-        ma_strone, znaleziony_url = _google_znajdz_strone(nazwa, adres, sk)
-        if ma_strone:
+        if ma_strone and znaleziony_url:
             istnieje, html = _sprawdz_http(znaleziony_url)
             if istnieje:
                 return _wynik_ma_strone(znaleziony_url, html)
