@@ -1121,13 +1121,14 @@ if st.session_state.tryb_modulu == "B2B":
         rows = []
         for i, f in enumerate(wszystkie):
             if wykl and jest_sieciowka(f["nazwa"]): continue
-            if bw and f["www"] not in ["brak","sprawdz na stronie",""]: continue
+            # bw (tylko bez WWW) jako pre-filtr dziala tylko gdy weryfikacja jest wylaczona
+            # gdy weryfikacja wlaczona — weryfikuj_strone samo odfiltrowuje firmy ze strona
+            if bw and not weryfikuj_www and f["www"] not in ["brak","sprawdz na stronie",""]: continue
             if bt and f["telefon"] in ["brak","","sprawdz na stronie"]: continue
             if f["opinie"] > mo or f["opinie"] < min_op: continue
             bar.progress(50 + int(40 * i / max(len(wszystkie),1))); msg.info("Analizuje: " + f["nazwa"])
             if weryfikuj_www:
                 wer = weryfikuj_strone(f["www"], nazwa=f["nazwa"], adres=f["adres"], sk=SK)
-                # Jesli weryfikacja wykazala ze firma MA strone — pomijamy leada
                 if wer.get("ma_strone"):
                     continue
             else:
