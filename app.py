@@ -513,41 +513,24 @@ def _google_znajdz_strone(nazwa, adres, sk):
 
 def weryfikuj_strone(url, nazwa="", adres="", sk=None):
     """
-    Dwuetapowa weryfikacja czy firma NA PEWNO nie ma strony.
-    Krok 1: sprawdz URL z Google Maps (jesli istnieje).
-    Krok 2: jesli brak URL lub to katalog — szukaj przez Google Search.
-    Przepuszcza lead dalej tylko jesli OBA kroki nie znalazly strony.
+    Weryfikacja czy firma ma wlasna strone WWW przez HTTP check.
+    Jesli URL z Google Maps to katalog/social — traktujemy jako brak strony.
+    Jesli brak URL — brak strony.
+    Tylko jezeli URL odpowiada HTTP 200 — firma MA strone i lead jest odrzucany.
     """
     url_czysty = (url or "").strip()
     brak_url = not url_czysty or url_czysty in ("brak", "sprawdz na stronie", "")
 
-    # KROK 1: mamy URL z Google Maps
-    if not brak_url:
-        if _jest_katalogiem(url_czysty):
-            # To katalog/social, nie wlasna strona — zapisz ale szukaj dalej przez Google
-            pass
-        else:
-            # Prawdziwy URL — sprawdz czy odpowiada
-            istnieje, html = _sprawdz_http(url_czysty)
-            if istnieje:
-                # Firma MA strone — odrzucamy jako lead (zwracamy ma_strone=True)
-                return _wynik_ma_strone(url_czysty, html)
-            else:
-                # URL podany ale nie odpowiada — moze strona padla, moze zly link
-                # Robimy Google fallback zanim uznamy ze nie ma strony
-                pass
+    if brak_url or _jest_katalogiem(url_czysty):
+        return _wynik_brak("Brak strony WWW")
 
-    # KROK 2: Google Search fallback — tylko dla firm bez URL lub z katalogiem
-    # Wymaga POTWIERDZENIA HTTP zanim odrzucimy leada (anti-false-positive)
-    if sk and (brak_url or _jest_katalogiem(url_czysty)):
-        ma_strone, znaleziony_url = _google_znajdz_strone(nazwa, adres, sk)
-        if ma_strone and znaleziony_url:
-            istnieje, html = _sprawdz_http(znaleziony_url)
-            if istnieje:
-                return _wynik_ma_strone(znaleziony_url, html)
+    # Prawdziwy URL — sprawdz czy odpowiada HTTP
+    istnieje, html = _sprawdz_http(url_czysty)
+    if istnieje:
+        return _wynik_ma_strone(url_czysty, html)
 
-    # OBA kroki nie znalazly strony — to prawdziwy lead bez WWW
-    return _wynik_brak("Brak strony WWW")
+    # URL istnieje ale nie odpowiada — strona padla lub zly link, traktuj jako brak
+    return _wynik_brak("Strona niedostepna")
 
 def oblicz_score(f, wer):
     s = 40
