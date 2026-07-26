@@ -293,7 +293,7 @@ def szukaj_maps(q, sk, limit=20):
             if page > 1:
                 payload["page"] = page
             r = requests.post("https://google.serper.dev/maps", headers={"X-API-KEY": sk, "Content-Type": "application/json"}, json=payload, timeout=12)
-            return [{"nazwa": p.get("title","?"), "telefon": p.get("phoneNumber","brak"), "www": p.get("website","brak"), "opinie": p.get("ratingCount",0), "ocena": p.get("rating",0), "adres": p.get("address","?"), "kategoria": p.get("category",""), "cid": p.get("cid","")} for p in r.json().get("places",[])]
+            return [{"nazwa": p.get("title","?"), "telefon": p.get("phoneNumber","brak"), "www": p.get("website","brak"), "opinie": p.get("ratingCount",0), "ocena": p.get("rating",0), "adres": p.get("address","?"), "kategoria": p.get("category",""), "cid": p.get("cid",""), "zdjecie": p.get("thumbnailUrl","") or p.get("imageUrl",""), "godziny": p.get("openingHours","") or p.get("hours",""), "typy": p.get("types",[]) or ([p.get("type")] if p.get("type") else []), "rezerwacja_maps": bool(p.get("bookingLinks"))} for p in r.json().get("places",[])]
         except:
             return []
     wyniki = _strona(1)
@@ -614,6 +614,125 @@ def status_leada(score):
     if score >= 80: return "HOT"
     elif score >= 60: return "WARM"
     else: return "COLD"
+
+# ══ MODUL MAPS — audyt i wycena optymalizacji wizytowki Google Maps ══
+def audyt_wizytowki(f):
+    """Wykrywa konkretne braki w wizytowce Google Maps danej firmy."""
+    braki = []
+    opinie = f.get("opinie", 0) or 0
+    ocena = f.get("ocena", 0) or 0
+    if opinie == 0: braki.append("Zero opinii — wizytowka niewidoczna w rankingu lokalnym")
+    elif opinie < 10: braki.append(f"Bardzo malo opinii ({opinie}) — konkurencja wypycha ich z TOP3")
+    elif opinie < 30: braki.append(f"Malo opinii ({opinie}) — slaby sygnal zaufania dla Google")
+    if 0 < ocena < 3.5: braki.append(f"Niska ocena ({ocena}/5) — klienci wybieraja konkurencje")
+    elif 3.5 <= ocena < 4.3: braki.append(f"Ocena ponizej rynkowej sredniej ({ocena}/5)")
+    if f.get("www", "brak") in ["brak", "sprawdz na stronie", ""]:
+        braki.append("Brak linku do strony WWW w wizytowce")
+    if f.get("telefon", "brak") in ["brak", "sprawdz na stronie", ""]:
+        braki.append("Brak numeru telefonu — klient nie moze zadzwonic jednym kliknieciem")
+    if not str(f.get("kategoria", "")).strip():
+        braki.append("Brak ustawionej kategorii dzialalnosci — Google nie wie za co ich pozycjonowac")
+    if not f.get("zdjecie", ""):
+        braki.append("Brak zdjecia glownego — profil wyglada na porzucony")
+    if not f.get("godziny", ""):
+        braki.append("Brak godzin otwarcia — klienci nie wiedza kiedy przyjsc")
+    if not f.get("rezerwacja_maps", False):
+        braki.append("Brak przycisku rezerwacji/umowienia wizyty")
+    return braki
+
+def oblicz_score_wizytowki(f):
+    """Score 0-99: jak bardzo wizytowka tej firmy wymaga optymalizacji."""
+    s = 25
+    opinie = f.get("opinie", 0) or 0
+    ocena = f.get("ocena", 0) or 0
+    if opinie == 0: s += 30
+    elif opinie < 10: s += 22
+    elif opinie < 30: s += 14
+    elif opinie < 60: s += 7
+    if 0 < ocena < 3.5: s += 18
+    elif 3.5 <= ocena < 4.3: s += 10
+    elif 4.3 <= ocena < 4.6: s += 4
+    if f.get("www", "brak") in ["brak", "sprawdz na stronie", ""]: s += 8
+    if f.get("telefon", "brak") in ["brak", "sprawdz na stronie", ""]: s += 12
+    if not str(f.get("kategoria", "")).strip(): s += 8
+    if not f.get("zdjecie", ""): s += 8
+    if not f.get("godziny", ""): s += 5
+    return min(s, 99)
+
+def oblicz_potencjal_maps(f, braki, branza=""):
+    """Szacuje ile PLN/mc firma moze zyskac po optymalizacji wizytowki."""
+    branza_l = branza.lower()
+    wartosc_klienta = 300
+    for klucz, wart in WARTOSC_KLIENTA_NISZA.items():
+        if klucz in branza_l:
+            wartosc_klienta = wart
+            break
+    opinie = f.get("opinie", 0) or 0
+    if opinie == 0: dodatkowi = 6
+    elif opinie < 10: dodatkowi = 5
+    elif opinie < 30: dodatkowi = 3
+    else: dodatkowi = 2
+    dodatkowi += min(len(braki), 4)
+    return max(50, round(dodatkowi * wartosc_klienta / 50) * 50)
+
+def analiza_claude_maps(f, branza, ak, braki, score, potencjal, lok="", opinie_tekst=None):
+    """Generuje diagnoze wizytowki, plan optymalizacji i gotowe komunikaty sprzedazowe."""
+    FALLBACK = {
+        "diagnoza": "Brak analizy AI — dodaj klucz Anthropic API.",
+        "plan": ["Uzupelnic brakujace dane w wizytowce", "Uruchomic zbieranie opinii", "Dodac zdjecia i posty"],
+        "sms": f"Dzien dobry! Sprawdzilem wizytowke Google firmy {f['nazwa']} — jest kilka rzeczy ktore blokuja Panstwa w wynikach lokalnych. Moge pokazac?",
+        "call": "Dzien dobry, dzwonie w sprawie wizytowki Google Maps. Czy maja Panstwo chwile?",
+        "email_temat": "Wizytowka Google — kilka szybkich poprawek",
+        "email_tresc": "Dzien dobry, przejrzalem Panstwa wizytowke w Google Maps i znalazlem kilka braków, ktore mozna szybko naprawic.",
+        "wycena": "500-1200 zl jednorazowo + opcjonalny abonament 300-500 zl/mc",
+        "szansa": 50,
+    }
+    if not ak: return FALLBACK
+    try:
+        braki_str = "; ".join(braki) if braki else "brak istotnych brakow"
+        user_prompt = f"""NAZWA FIRMY: {f['nazwa']}
+BRANZA: {branza}
+LOKALIZACJA: {lok}
+ADRES: {f.get('adres','?')}
+LICZBA OPINII GOOGLE: {f.get('opinie',0)}
+OCENA GOOGLE: {f.get('ocena',0)}/5
+KATEGORIA W WIZYTOWCE: {f.get('kategoria','') or 'BRAK'}
+TELEFON W WIZYTOWCE: {f.get('telefon','brak')}
+STRONA WWW W WIZYTOWCE: {f.get('www','brak')}
+ZDJECIE GLOWNE: {'jest' if f.get('zdjecie') else 'BRAK'}
+GODZINY OTWARCIA: {'sa' if f.get('godziny') else 'BRAK'}
+
+WYKRYTE BRAKI W WIZYTOWCE: {braki_str}
+SZACOWANY POTENCJAL WZROSTU PO OPTYMALIZACJI: {potencjal} PLN/mc
+TRESC OPINII KLIENTOW: {chr(10).join('- ' + o for o in opinie_tekst) if opinie_tekst else 'brak danych'}
+
+Zwroc JSON z polami: diagnoza, plan, sms, call, email_temat, email_tresc, wycena, szansa"""
+
+        system_prompt = """Jestes ekspertem od Google Business Profile (wizytowek Google Maps) i lokalnego SEO w Polsce, oraz copywriterem cold outreach. Sprzedajesz USLUGE OPTYMALIZACJI WIZYTOWKI — nie strone internetowa. Odpowiadasz WYLACZNIE czystym JSON, zero tekstu przed/po, zero markdown.
+
+KLUCZOWA ZASADA: nie proponuj budowy strony WWW. Twoja usluga to: uzupelnienie i optymalizacja wizytowki Google, zdobywanie opinii, dodawanie zdjec i postow, ustawienie kategorii i atrybutow, odpowiadanie na opinie, pozycjonowanie w lokalnym pakiecie (mapka TOP3).
+
+ZAKAZANE FRAZY: "Zauwazylismy, ze...", "Chetnie pomozemy", "Oferujemy kompleksowe uslugi", "szeroka gama rozwiazan".
+
+Struktura JSON:
+{
+  "diagnoza": "2-3 zdania: co konkretnie jest zle w tej wizytowce i jak to przeklada sie na utracone telefony od klientow. Uzyj realnych liczb z danych.",
+  "plan": ["krok 1 - konkretne dzialanie", "krok 2", "krok 3", "krok 4", "krok 5"],
+  "sms": "max 320 znakow. Otwarcie konkretna obserwacja o ICH wizytowce (liczba opinii / brak zdjec / kategoria). Bez oferty strony WWW. Zakonczenie pytaniem o zgode na pokazanie szczegolow.",
+  "call": "skrypt rozmowy 4-6 zdan: otwarcie, konkretny problem z wizytowka, co to kosztuje w klientach, propozycja nastepnego kroku",
+  "email_temat": "max 60 znakow, konkretny, bez clickbaitu",
+  "email_tresc": "4-6 zdan. Konkretne braki wypunktowane, potencjal wzrostu w PLN, jasne CTA.",
+  "wycena": "sugerowana wycena tej uslugi w PLN dla tego konkretnego leada (jednorazowo i/lub abonament) - dopasowana do wielkosci firmy i branzy",
+  "szansa": liczba 0-100 - szacowana szansa na sprzedaz tej uslugi
+}"""
+        tekst = claude_call(system_prompt, user_prompt, ak, 2000)
+        wynik = safe_parse_json(tekst)
+        if wynik is None: return FALLBACK
+        for k, v in FALLBACK.items():
+            if k not in wynik: wynik[k] = v
+        return wynik
+    except Exception:
+        return FALLBACK
 
 def analiza_claude_b2b(f, branza, ak, wer, score, strata=0, lok="", opinie_tekst=None):
     FALLBACK = {"problem": "Brak analizy AI", "sms": "Dzien dobry! Budujemy strony dla firm z branzy " + branza + ". Czy moge przedstawic oferte?", "call": "Dzien dobry, dzwonie w sprawie strony internetowej. Czy maja Panstwo chwile?", "email_temat": "Propozycja wspolpracy", "email_tresc": "Dzien dobry, chcielibysmy przedstawic oferte na strone WWW.", "followup1": "Czy mieli Panstwo okazje zapoznac sie z nasza oferta?", "followup2": "To ostatnia wiadomosc — czy moge pomoc?", "szansa": 50, "odpowiedz_na_opinie": ""}
@@ -1043,7 +1162,7 @@ if pozostalo <= 5:
     st.markdown(f'<div class="warning-box">⚠️ Zostało Ci tylko <b>{pozostalo} skanów</b>. Odnów subskrypcję.</div>', unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
 
-mc1, mc2, mc3, _ = st.columns([1.3, 1.5, 1.7, 1.8])
+mc1, mc2, mc3, mc4 = st.columns([1.3, 1.5, 1.7, 1.9])
 with mc1:
     if st.button("B2B — Znajdź firmy do oferty", type="primary" if st.session_state.tryb_modulu=="B2B" else "secondary", use_container_width=True):
         st.session_state.tryb_modulu = "B2B"; st.rerun()
@@ -1053,6 +1172,9 @@ with mc2:
 with mc3:
     if st.button("🎨 Generator Mockupów Premium", type="primary" if st.session_state.tryb_modulu=="MOCKUP" else "secondary", use_container_width=True):
         st.session_state.tryb_modulu = "MOCKUP"; st.rerun()
+with mc4:
+    if st.button("📍 MAPS — Optymalizacja wizytówek", type="primary" if st.session_state.tryb_modulu=="MAPS" else "secondary", use_container_width=True):
+        st.session_state.tryb_modulu = "MAPS"; st.rerun()
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
@@ -1246,6 +1368,156 @@ if st.session_state.tryb_modulu == "B2B":
                         else: st.error("Webhook odpowiedzial bledem: " + str(resp.status_code))
                     except Exception as e:
                         st.error("Nie udalo sie wyslac do Webhooka: " + str(e))
+
+# ══════════════════════════════════════════
+# MODUL MAPS — OPTYMALIZACJA WIZYTOWEK GOOGLE
+# ══════════════════════════════════════════
+elif st.session_state.tryb_modulu == "MAPS":
+    st.markdown('<div class="section-header">📍 MAPS — Znajdz firmy ze slabo prowadzona wizytowka Google</div>', unsafe_allow_html=True)
+    st.markdown('<div class="info-box">Ten modul szuka firm, ktore <b>maja</b> wizytowke w Google Maps, ale prowadza ja zle: malo opinii, brak zdjec, brak kategorii, brak telefonu, niska ocena. Sprzedajesz im <b>optymalizacje wizytowki i lokalne SEO</b> — nie strone WWW. To tansza usluga, latwiejsza do domkniecia i czesto na abonament.</div>', unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    mcol1, mcol2 = st.columns(2)
+    with mcol1: branza_m = st.text_input("Branza / Nisza", placeholder="np. Fizjoterapia, Weterynarz, Restauracja...", key="maps_branza_input")
+    with mcol2:
+        lok_m = ""
+        if tryb_lok == "Konkretne miasto": lok_m = st.text_input("Miasto", placeholder="np. Warszawa, Krakow...", key="maps_lok_miasto")
+        elif tryb_lok == "Gmina / Powiat": lok_m = st.text_input("Gmina / Powiat", placeholder="np. Gmina Piaseczno...", key="maps_lok_gmina")
+        elif tryb_lok == "Wojewodztwo": lok_m = "woj. " + st.selectbox("Wojewodztwo", WOJEWODZTWA, key="maps_lok_woj")
+        else:
+            mkc1, mkc2 = st.columns(2)
+            with mkc1: kp_m = st.text_input("Kod pocztowy", placeholder="02-001", key="maps_lok_kod")
+            with mkc2: pr_m = st.selectbox("Promien", ["5 km","10 km","25 km","50 km"], key="maps_lok_promien")
+            lok_m = kp_m + " (+" + pr_m + ")"
+
+    fm1, fm2 = st.columns(2)
+    with fm1: max_opinii_m = st.slider("Maks opinii (firmy powyzej tego progu prowadza wizytowke dobrze)", 5, 300, 60, key="maps_max_opinii")
+    with fm2: min_score_m = st.slider("Min Score wizytowki (jak bardzo wymaga poprawy)", 0, 99, 55, key="maps_min_score")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    _, bcm, _ = st.columns([1,2,1])
+    with bcm: go_maps = st.button("URUCHOM AUDYT WIZYTOWEK", type="primary", use_container_width=True, disabled=(pozostalo <= 0))
+
+    if go_maps:
+        if not branza_m.strip(): st.error("Wpisz branze!"); st.stop()
+        if not SK: st.error("Brak klucza Serper!"); st.stop()
+        barm = st.progress(0); msgm = st.empty(); statm = st.empty()
+        firmy_m = []; widziane_m = set()
+        msgm.info("Generuje zapytania..."); barm.progress(5)
+        zapytania_m = generuj_zapytania_b2b(branza_m, lok_m, AK, tryb_skanu)
+        for i, zap in enumerate(zapytania_m):
+            barm.progress(int(10 + 35 * i / len(zapytania_m))); msgm.info(f"Skanuje ({i+1}/{len(zapytania_m)}): {zap}")
+            for f in szukaj_maps(zap, SK, mf):
+                k = f["nazwa"].lower().strip()
+                if k not in widziane_m: widziane_m.add(k); firmy_m.append(f)
+            statm.info(f"Zebrano {len(firmy_m)} wizytowek...")
+        barm.progress(50); msgm.info(f"Audytuje {len(firmy_m)} wizytowek...")
+
+        rows_m = []
+        diag_m = {"serper": len(firmy_m), "sieciowki": 0, "duzo_opinii": 0, "score": 0}
+        for i, f in enumerate(firmy_m):
+            if wykl and jest_sieciowka(f["nazwa"]): diag_m["sieciowki"] += 1; continue
+            if (f.get("opinie", 0) or 0) > max_opinii_m: diag_m["duzo_opinii"] += 1; continue
+            barm.progress(50 + int(40 * i / max(len(firmy_m), 1))); msgm.info("Audytuje: " + f["nazwa"])
+            braki = audyt_wizytowki(f)
+            score_m = oblicz_score_wizytowki(f)
+            if score_m < min_score_m: diag_m["score"] += 1; continue
+            potencjal = oblicz_potencjal_maps(f, braki, branza_m)
+            opinie_txt = pobierz_opinie(f.get("cid", ""), SK) if score_m >= 70 else []
+            ai_m = analiza_claude_maps(f, branza_m, AK, braki, score_m, potencjal, lok_m, opinie_txt)
+            maps_link = f"https://www.google.com/maps?cid={f['cid']}" if f.get("cid") else "https://www.google.com/maps/search/" + requests.utils.quote(f["nazwa"] + " " + f.get("adres", ""))
+            plan_lista = ai_m.get("plan", [])
+            rows_m.append({
+                "Status": status_leada(score_m), "Nazwa": f["nazwa"], "Telefon": f.get("telefon", "brak"),
+                "Opinie": f.get("opinie", 0), "Ocena Google": f.get("ocena", 0),
+                "Braki": len(braki), "Score wizytowki": score_m,
+                "Potencjal/mc (PLN)": potencjal, "Wycena uslugi": ai_m.get("wycena", ""),
+                "Szansa %": ai_m.get("szansa", 50), "Diagnoza": ai_m.get("diagnoza", ""),
+                "Plan": " | ".join(plan_lista) if isinstance(plan_lista, list) else str(plan_lista),
+                "Lista brakow": " | ".join(braki), "Kategoria": f.get("kategoria", "") or "BRAK",
+                "WWW": f.get("www", "brak"), "Adres": f.get("adres", ""),
+                "SMS": ai_m.get("sms", ""), "Call": ai_m.get("call", ""),
+                "Email temat": ai_m.get("email_temat", ""), "Email tresc": ai_m.get("email_tresc", ""),
+                "Wizytowka": maps_link,
+            })
+        barm.progress(100); msgm.empty(); statm.empty(); barm.empty()
+        if not rows_m:
+            st.warning("Brak wynikow. Zmien filtry.")
+            st.info(f"📊 Diagnoza: Serper zwrocil **{diag_m['serper']}** wizytowek → sieciowki: **{diag_m['sieciowki']}** → za duzo opinii (dobrze prowadzone): **{diag_m['duzo_opinii']}** → score ponizej progu: **{diag_m['score']}** → wynikow: **0**")
+            st.stop()
+        df_m = pd.DataFrame(rows_m).sort_values("Score wizytowki", ascending=False).reset_index(drop=True)
+        zapisz_skan(st.session_state.kod_info)
+        st.session_state.kod_info["skany_wykorzystane"] += 1; st.session_state.kod_info["pozostalo"] -= 1
+        st.session_state.historia.append({"branza": branza_m + " (MAPS)", "lok": lok_m, "wyniki": len(df_m), "czas": datetime.now().strftime("%H:%M")})
+        st.session_state["maps_df"] = df_m; st.session_state["maps_branza"] = branza_m; st.session_state["maps_lok"] = lok_m
+
+    if "maps_df" not in st.session_state and not go_maps:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown('<div class="info-box">👆 Wpisz branze i lokalizacje, kliknij "URUCHOM AUDYT WIZYTOWEK". Dostaniesz liste firm z policzonymi brakami w wizytowce, gotowa diagnoza, planem optymalizacji krok po kroku, sugerowana wycena uslugi i gotowymi wiadomosciami do wyslania.</div>', unsafe_allow_html=True)
+
+    if "maps_df" in st.session_state:
+        df_m = st.session_state["maps_df"]; branza_m2 = st.session_state["maps_branza"]; lok_m2 = st.session_state["maps_lok"]
+        st.markdown(f'<div class="success-box">Znaleziono {len(df_m)} wizytowek do optymalizacji | {branza_m2} | {lok_m2}</div>', unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+        hot_m = int((df_m["Status"] == "HOT").sum()); zero_op = int((df_m["Opinie"] == 0).sum())
+        sr_braki = round(float(df_m["Braki"].mean()), 1); sr_score_m = int(df_m["Score wizytowki"].mean())
+        km1, km2, km3, km4, km5 = st.columns(5)
+        km1.markdown(f'<div class="kpi-card"><div class="kpi-val">{len(df_m)}</div><div class="kpi-label">Wizytowek</div></div>', unsafe_allow_html=True)
+        km2.markdown(f'<div class="kpi-card"><div class="kpi-val kpi-val-red">{hot_m}</div><div class="kpi-label">HOT leads</div></div>', unsafe_allow_html=True)
+        km3.markdown(f'<div class="kpi-card"><div class="kpi-val kpi-val-orange">{zero_op}</div><div class="kpi-label">Zero opinii</div></div>', unsafe_allow_html=True)
+        km4.markdown(f'<div class="kpi-card"><div class="kpi-val kpi-val-purple">{sr_braki}</div><div class="kpi-label">Sr. brakow</div></div>', unsafe_allow_html=True)
+        km5.markdown(f'<div class="kpi-card"><div class="kpi-val kpi-val-green">{sr_score_m}</div><div class="kpi-label">Sr Score</div></div>', unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+        pot_total = int(df_m["Potencjal/mc (PLN)"].sum())
+        st.markdown(f'<div class="warning-box" style="text-align:center;padding:1.2rem"><div style="font-size:.85rem;color:#92400e;font-weight:600;text-transform:uppercase;letter-spacing:.05em">📈 Laczny potencjal wzrostu tych firm po optymalizacji wizytowek</div><div style="font-size:2.2rem;font-weight:800;color:#b45309;margin:.3rem 0">{pot_total:,} PLN / miesiac</div><div style="font-size:.85rem;color:#92400e">Tyle ten rynek traci co miesiac przez zle prowadzone wizytowki Google — Twoj argument numer 1 w rozmowie.</div></div>'.replace(",", " "), unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        tm1, tm2, tm3, tm4, tm5 = st.tabs(["Tabela audytu", "Plan optymalizacji", "SMS / Cold Call", "Email", "Eksport"])
+        with tm1:
+            st.dataframe(
+                df_m[["Status","Nazwa","Telefon","Opinie","Ocena Google","Braki","Score wizytowki","Potencjal/mc (PLN)","Wizytowka"]],
+                use_container_width=True, hide_index=True,
+                column_config={
+                    "Status": st.column_config.TextColumn("Status", help="HOT = wizytowka w oplakanym stanie, latwy argument sprzedazowy."),
+                    "Braki": st.column_config.NumberColumn("Braki", help="Ile konkretnych brakow wykryto w wizytowce."),
+                    "Score wizytowki": st.column_config.ProgressColumn("Score wizytowki", min_value=0, max_value=99, format="%d/99", help="Jak bardzo wizytowka wymaga optymalizacji. Wyzej = wiekszy potencjal sprzedazy."),
+                    "Potencjal/mc (PLN)": st.column_config.NumberColumn("Potencjal/mc", format="%d zl", help="Ile firma moze zyskac miesiecznie po optymalizacji wizytowki."),
+                    "Wizytowka": st.column_config.LinkColumn("📍 Wizytowka", display_text="Zobacz →", help="Otworz wizytowke w Google Maps i zweryfikuj braki na wlasne oczy."),
+                })
+            with st.expander("🔍 Szczegoly: jakie dokladnie braki i diagnoza"):
+                st.dataframe(df_m[["Nazwa","Kategoria","WWW","Lista brakow","Diagnoza","Szansa %"]], use_container_width=True, hide_index=True,
+                             column_config={"Szansa %": st.column_config.ProgressColumn("Szansa %", min_value=0, max_value=100, format="%d%%")})
+        with tm2:
+            for _, row in df_m.head(25).iterrows():
+                with st.expander(f"{row['Status']} | {row['Nazwa']} — {row['Braki']} brakow | Score: {row['Score wizytowki']}/99"):
+                    st.markdown(f"**Diagnoza:** {row['Diagnoza']}")
+                    st.markdown(f"**Potencjal:** `{row['Potencjal/mc (PLN)']} zl/mc` &nbsp;&nbsp; **Sugerowana wycena:** `{row['Wycena uslugi']}`")
+                    st.markdown("**Wykryte braki:**")
+                    for b in str(row["Lista brakow"]).split(" | "):
+                        if b.strip(): st.markdown(f'<div class="action-item">⚠️ {b}</div>', unsafe_allow_html=True)
+                    st.markdown("**Plan optymalizacji (to sprzedajesz):**")
+                    for kroki in str(row["Plan"]).split(" | "):
+                        if kroki.strip(): st.markdown(f'<div class="action-item">✅ {kroki}</div>', unsafe_allow_html=True)
+                    st.link_button("📍 Otworz wizytowke w Google Maps", row["Wizytowka"], use_container_width=True)
+        with tm3:
+            for _, row in df_m.head(25).iterrows():
+                with st.expander(f"{row['Status']} | {row['Nazwa']} — {row['Telefon']} | Score: {row['Score wizytowki']}/99"):
+                    cm1, cm2 = st.columns(2)
+                    with cm1: st.markdown("**SMS:**"); st.code(row["SMS"], language=None, wrap_lines=True)
+                    with cm2: st.markdown("**Cold Call:**"); st.code(row["Call"], language=None, wrap_lines=True)
+                    st.caption("Diagnoza: " + str(row["Diagnoza"]))
+        with tm4:
+            for _, row in df_m.head(25).iterrows():
+                with st.expander(f"{row['Status']} | {row['Nazwa']} | Score: {row['Score wizytowki']}/99"):
+                    st.markdown("**Temat:** `" + str(row["Email temat"]) + "`")
+                    st.code(row["Email tresc"], language=None, wrap_lines=True)
+        with tm5:
+            em1, em2 = st.columns(2)
+            with em1:
+                st.download_button("Pobierz pelny audyt CSV", df_m.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig"), file_name="audyt_wizytowek_" + branza_m2 + ".csv", mime="text/csv", use_container_width=True)
+            with em2:
+                df_mh = df_m[df_m["Status"].isin(["HOT","WARM"])]
+                st.download_button("Pobierz HOT + WARM", df_mh.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig"), file_name="HOT_WARM_wizytowki_" + branza_m2 + ".csv", mime="text/csv", use_container_width=True)
 
 # ══════════════════════════════════════════
 # MODUL GENERATOR MOCKUPOW PREMIUM
