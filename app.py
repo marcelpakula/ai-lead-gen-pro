@@ -1128,6 +1128,11 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### Filtry B2B")
     bw = st.checkbox("Tylko BEZ strony WWW")
+    tylko_wiz = st.checkbox("Tylko wizytowki do poprawy", help="Pokaz wylacznie firmy, ktore maja wizytowke w Google Maps prowadzona zle: malo opinii, niska ocena, brak zdjecia, brak kategorii, brak telefonu. Sprzedajesz im optymalizacje wizytowki, nie strone WWW.")
+    if tylko_wiz:
+        prog_wiz = st.slider("Min Score wizytowki", 0, 99, 55, help="Im wyzej, tym gorzej prowadzona wizytowka (i latwiejszy argument sprzedazowy).")
+    else:
+        prog_wiz = 0
     bt = st.checkbox("Tylko Z telefonem", value=True)
     wykl = st.checkbox("Wykluczaj sieciowki", value=True)
     weryfikuj_www = st.checkbox("Weryfikuj strony WWW", value=True)
@@ -1219,15 +1224,20 @@ if st.session_state.tryb_modulu == "B2B":
             stats_box.info("Zebrano " + str(len(wszystkie)) + " firm...")
         bar.progress(50); msg.info("Weryfikuje " + str(len(wszystkie)) + " firm...")
         rows = []
-        diag = {"serper": len(wszystkie), "sieciowki": 0, "telefon": 0, "opinie": 0, "ma_strone": 0, "score": 0}
+        diag = {"serper": len(wszystkie), "sieciowki": 0, "telefon": 0, "opinie": 0, "wizytowka": 0, "ma_strone": 0, "score": 0}
         for i, f in enumerate(wszystkie):
             if wykl and jest_sieciowka(f["nazwa"]): diag["sieciowki"] += 1; continue
             if bt and f["telefon"] in ["brak","","sprawdz na stronie"]: diag["telefon"] += 1; continue
             if f["opinie"] > mo or f["opinie"] < min_op: diag["opinie"] += 1; continue
+            # Audyt wizytowki Google Maps — zawsze liczony, filtruje tylko gdy zaznaczono checkbox
+            braki_wiz = audyt_wizytowki(f)
+            score_wiz = oblicz_score_wizytowki(f)
+            if tylko_wiz and score_wiz < prog_wiz: diag["wizytowka"] += 1; continue
             bar.progress(50 + int(40 * i / max(len(wszystkie),1))); msg.info("Analizuje: " + f["nazwa"])
             if weryfikuj_www:
                 wer = weryfikuj_strone(f["www"], nazwa=f["nazwa"], adres=f["adres"], sk=SK)
-                if wer.get("ma_strone"):
+                # firmy ze strona odrzucamy tylko gdy user chce WYLACZNIE firmy bez strony
+                if bw and wer.get("ma_strone"):
                     diag["ma_strone"] += 1; continue
             else:
                 wer = {"ma_strone": False, "dziala": True, "ssl": False, "ocena_www": 5, "problemy": [], "ma_rezerwacje": False, "ma_social": False, "technologia": "Nie sprawdzano", "piksele": [], "pagespeed": None, "email": ""}
@@ -1239,13 +1249,14 @@ if st.session_state.tryb_modulu == "B2B":
             opinie_tekst = pobierz_opinie(f.get("cid",""), SK) if score >= 60 else []
             ai = analiza_claude_b2b(f, branza, AK, wer, score, strata, lok, opinie_tekst)
             google_check_url = "https://www.google.com/search?q=" + requests.utils.quote(f["nazwa"] + " " + f["adres"].split(",")[-1].strip())
-            rows.append({"Status": status_leada(score), "Nazwa": f["nazwa"], "Telefon": f["telefon"], "WWW": f["www"], "Adres": f["adres"], "Opinie": f["opinie"], "Ocena Google": f["ocena"], "Ocena strony": wer["ocena_www"], "Technologia": wer["technologia"], "PageSpeed": wer["pagespeed"] if wer["pagespeed"] is not None else "-", "Email": wer["email"] if wer["email"] else "brak", "Reklamuje sie": ", ".join(wer["piksele"]) if wer["piksele"] else "NIE", "SSL": "TAK" if wer["ssl"] else "NIE", "Rezerwacja": "TAK" if wer["ma_rezerwacje"] else "NIE", "Problemy WWW": " | ".join(wer["problemy"]) if wer["problemy"] else "OK", "AI Score": score, "Strata/mc (PLN)": strata, "Szansa %": ai.get("szansa",50), "Problem": ai.get("problem",""), "SMS": ai.get("sms",""), "Call": ai.get("call",""), "Email temat": ai.get("email_temat",""), "Email tresc": ai.get("email_tresc",""), "Followup 1": ai.get("followup1",""), "Followup 2": ai.get("followup2",""), "Odpowiedz na opinie": ai.get("odpowiedz_na_opinie",""), "Google Check": google_check_url})
+            rows.append({"Status": status_leada(score), "Nazwa": f["nazwa"], "Telefon": f["telefon"], "WWW": f["www"], "Adres": f["adres"], "Opinie": f["opinie"], "Ocena Google": f["ocena"], "Ocena strony": wer["ocena_www"], "Technologia": wer["technologia"], "PageSpeed": wer["pagespeed"] if wer["pagespeed"] is not None else "-", "Email": wer["email"] if wer["email"] else "brak", "Reklamuje sie": ", ".join(wer["piksele"]) if wer["piksele"] else "NIE", "SSL": "TAK" if wer["ssl"] else "NIE", "Rezerwacja": "TAK" if wer["ma_rezerwacje"] else "NIE", "Problemy WWW": " | ".join(wer["problemy"]) if wer["problemy"] else "OK", "AI Score": score, "Strata/mc (PLN)": strata, "Szansa %": ai.get("szansa",50), "Problem": ai.get("problem",""), "SMS": ai.get("sms",""), "Call": ai.get("call",""), "Email temat": ai.get("email_temat",""), "Email tresc": ai.get("email_tresc",""), "Followup 1": ai.get("followup1",""), "Followup 2": ai.get("followup2",""), "Odpowiedz na opinie": ai.get("odpowiedz_na_opinie",""), "Google Check": google_check_url, "Score wizytowki": score_wiz, "Braki wizytowki": len(braki_wiz), "Lista brakow wizytowki": " | ".join(braki_wiz) if braki_wiz else "OK", "Wizytowka": (f"https://www.google.com/maps?cid={f['cid']}" if f.get("cid") else google_check_url)})
         bar.progress(100); msg.empty(); stats_box.empty(); bar.empty()
         if not rows:
             st.warning(f"Brak wynikow. Zmien filtry.")
             st.info(f"📊 Diagnoza: Serper zwrócił **{diag['serper']}** firm → "
                     f"sieciówki: **{diag['sieciowki']}** → brak tel: **{diag['telefon']}** → "
                     f"opinie poza zakresem: **{diag['opinie']}** → "
+                    f"wizytówka OK (odrzucone przez filtr): **{diag['wizytowka']}** → "
                     f"ma stronę (odrzucone): **{diag['ma_strone']}** → "
                     f"zbyt niski score: **{diag['score']}** → wyników: **0**")
             st.stop()
@@ -1284,6 +1295,12 @@ if st.session_state.tryb_modulu == "B2B":
             st.dataframe(df[["Status","Nazwa","Telefon","AI Score","Strata/mc (PLN)","Google Check"]], use_container_width=True, hide_index=True, column_config={"Status": st.column_config.TextColumn("Status", help="HOT = gotowy do kontaktu teraz. WARM = warto, ale mniej palace. COLD = niska szansa - pomin lub kontaktuj na koniec."), "AI Score": st.column_config.ProgressColumn("AI Score", min_value=0, max_value=99, format="%d/99", help="Ocena 0-99 jak bardzo ta firma potrzebuje Twoich uslug. Wyzej = wieksza szansa na sprzedaz, zacznij od najwyzszych."), "Strata/mc (PLN)": st.column_config.NumberColumn("Strata/mc (PLN)", format="%d zl", help="Szacowana kwota, ktora firma traci miesiecznie przez problemy ze strona/marketingiem. Twoj glowny argument w rozmowie z leadem."), "Google Check": st.column_config.LinkColumn("🔍 Sprawdź w Google", display_text="Sprawdź →", help="Kliknij przed kontaktem — upewnij sie ze firma naprawde nie ma strony.")})
             with st.expander("📈 Szansa i diagnoza problemu"):
                 st.dataframe(df[["Nazwa","WWW","Szansa %","Problem","Google Check"]], use_container_width=True, hide_index=True, column_config={"Szansa %": st.column_config.ProgressColumn("Szansa %", min_value=0, max_value=100, format="%d%%", help="Szacowana szansa, ze ta firma kupi Twoja usluge - na podstawie diagnozy AI."), "Problem": st.column_config.TextColumn("Problem", help="Glowny problem wykryty przez AI - uzyj go jako 'haczyka' w pierwszej rozmowie z leadem."), "Google Check": st.column_config.LinkColumn("🔍 Sprawdź w Google", display_text="Sprawdź →", help="Kliknij przed kontaktem — upewnij sie ze firma naprawde nie ma strony.")})
+            with st.expander("📍 Wizytowka Google Maps — co jest do poprawy"):
+                st.dataframe(df[["Nazwa","Opinie","Ocena Google","Braki wizytowki","Score wizytowki","Lista brakow wizytowki","Wizytowka"]], use_container_width=True, hide_index=True, column_config={
+                    "Braki wizytowki": st.column_config.NumberColumn("Braki", help="Ile konkretnych brakow wykryto w wizytowce Google Maps tej firmy."),
+                    "Score wizytowki": st.column_config.ProgressColumn("Score wizytowki", min_value=0, max_value=99, format="%d/99", help="Jak bardzo wizytowka wymaga optymalizacji. Wyzej = latwiejszy argument na sprzedaz uslugi optymalizacji wizytowki."),
+                    "Lista brakow wizytowki": st.column_config.TextColumn("Co jest do poprawy", help="Konkretne braki - uzyj ich jako argumentow w rozmowie."),
+                    "Wizytowka": st.column_config.LinkColumn("📍 Wizytowka", display_text="Zobacz →", help="Otworz wizytowke w Google Maps i zweryfikuj braki na wlasne oczy.")})
             with st.expander("🔍 Szczegoly techniczne (CMS, piksele, SSL, rezerwacje...)"):
                 st.dataframe(df[["Nazwa","Email","Opinie","Ocena Google","Ocena strony","Technologia","PageSpeed","Reklamuje sie","SSL","Rezerwacja","Problemy WWW"]], use_container_width=True, hide_index=True, column_config={"Ocena strony": st.column_config.ProgressColumn("Ocena strony", min_value=0, max_value=10, format="%d/10")})
         with tab2:
