@@ -626,8 +626,6 @@ def audyt_wizytowki(f):
     elif opinie < 30: braki.append(f"Malo opinii ({opinie}) — slaby sygnal zaufania dla Google")
     if 0 < ocena < 3.5: braki.append(f"Niska ocena ({ocena}/5) — klienci wybieraja konkurencje")
     elif 3.5 <= ocena < 4.3: braki.append(f"Ocena ponizej rynkowej sredniej ({ocena}/5)")
-    if f.get("www", "brak") in ["brak", "sprawdz na stronie", ""]:
-        braki.append("Brak linku do strony WWW w wizytowce")
     if f.get("telefon", "brak") in ["brak", "sprawdz na stronie", ""]:
         braki.append("Brak numeru telefonu — klient nie moze zadzwonic jednym kliknieciem")
     if not str(f.get("kategoria", "")).strip():
@@ -652,7 +650,6 @@ def oblicz_score_wizytowki(f):
     if 0 < ocena < 3.5: s += 18
     elif 3.5 <= ocena < 4.3: s += 10
     elif 4.3 <= ocena < 4.6: s += 4
-    if f.get("www", "brak") in ["brak", "sprawdz na stronie", ""]: s += 8
     if f.get("telefon", "brak") in ["brak", "sprawdz na stronie", ""]: s += 12
     if not str(f.get("kategoria", "")).strip(): s += 8
     if not f.get("zdjecie", ""): s += 8
@@ -1241,15 +1238,36 @@ if st.session_state.tryb_modulu == "B2B":
                     diag["ma_strone"] += 1; continue
             else:
                 wer = {"ma_strone": False, "dziala": True, "ssl": False, "ocena_www": 5, "problemy": [], "ma_rezerwacje": False, "ma_social": False, "technologia": "Nie sprawdzano", "piksele": [], "pagespeed": None, "email": ""}
+            # SEGMENTACJA: lead bez strony = kampania "strona WWW", nie "wizytowka".
+            # Przy filtrze wizytowek takie firmy odrzucamy, zeby nie mieszac dwoch pitchow.
+            if tylko_wiz and weryfikuj_www and not wer.get("ma_strone"):
+                diag["brak_strony_wiz"] = diag.get("brak_strony_wiz", 0) + 1; continue
             if not wer["email"]:
                 wer["email"] = szukaj_email_google(f["nazwa"], f["adres"], SK)
             score = oblicz_score(f, wer)
             if score < min_score: diag["score"] += 1; continue
-            strata = oblicz_strate_finansowa(f, wer, branza)
             opinie_tekst = pobierz_opinie(f.get("cid",""), SK) if score >= 60 else []
-            ai = analiza_claude_b2b(f, branza, AK, wer, score, strata, lok, opinie_tekst)
             google_check_url = "https://www.google.com/search?q=" + requests.utils.quote(f["nazwa"] + " " + f["adres"].split(",")[-1].strip())
-            rows.append({"Status": status_leada(score), "Nazwa": f["nazwa"], "Telefon": f["telefon"], "WWW": f["www"], "Adres": f["adres"], "Opinie": f["opinie"], "Ocena Google": f["ocena"], "Ocena strony": wer["ocena_www"], "Technologia": wer["technologia"], "PageSpeed": wer["pagespeed"] if wer["pagespeed"] is not None else "-", "Email": wer["email"] if wer["email"] else "brak", "Reklamuje sie": ", ".join(wer["piksele"]) if wer["piksele"] else "NIE", "SSL": "TAK" if wer["ssl"] else "NIE", "Rezerwacja": "TAK" if wer["ma_rezerwacje"] else "NIE", "Problemy WWW": " | ".join(wer["problemy"]) if wer["problemy"] else "OK", "AI Score": score, "Strata/mc (PLN)": strata, "Szansa %": ai.get("szansa",50), "Problem": ai.get("problem",""), "SMS": ai.get("sms",""), "Call": ai.get("call",""), "Email temat": ai.get("email_temat",""), "Email tresc": ai.get("email_tresc",""), "Followup 1": ai.get("followup1",""), "Followup 2": ai.get("followup2",""), "Odpowiedz na opinie": ai.get("odpowiedz_na_opinie",""), "Google Check": google_check_url, "Score wizytowki": score_wiz, "Braki wizytowki": len(braki_wiz), "Lista brakow wizytowki": " | ".join(braki_wiz) if braki_wiz else "OK", "Wizytowka": (f"https://www.google.com/maps?cid={f['cid']}" if f.get("cid") else google_check_url)})
+
+            if tylko_wiz:
+                # Kampania WIZYTOWKA — pitch optymalizacji wizytowki Google
+                typ_leada = "WIZYTOWKA"
+                strata = oblicz_potencjal_maps(f, braki_wiz, branza)
+                am = analiza_claude_maps(f, branza, AK, braki_wiz, score_wiz, strata, lok, opinie_tekst)
+                plan_l = am.get("plan", [])
+                ai = {"problem": am.get("diagnoza",""), "sms": am.get("sms",""), "call": am.get("call",""),
+                      "email_temat": am.get("email_temat",""), "email_tresc": am.get("email_tresc",""),
+                      "followup1": "", "followup2": "", "szansa": am.get("szansa",50), "odpowiedz_na_opinie": ""}
+                plan_opt = " | ".join(plan_l) if isinstance(plan_l, list) else str(plan_l)
+                wycena = am.get("wycena","")
+            else:
+                # Kampania STRONA WWW — pitch budowy/poprawy strony
+                typ_leada = "STRONA WWW"
+                strata = oblicz_strate_finansowa(f, wer, branza)
+                ai = analiza_claude_b2b(f, branza, AK, wer, score, strata, lok, opinie_tekst)
+                plan_opt = ""
+                wycena = ""
+            rows.append({"Typ leada": typ_leada, "Plan optymalizacji": plan_opt, "Wycena uslugi": wycena, "Status": status_leada(score), "Nazwa": f["nazwa"], "Telefon": f["telefon"], "WWW": f["www"], "Adres": f["adres"], "Opinie": f["opinie"], "Ocena Google": f["ocena"], "Ocena strony": wer["ocena_www"], "Technologia": wer["technologia"], "PageSpeed": wer["pagespeed"] if wer["pagespeed"] is not None else "-", "Email": wer["email"] if wer["email"] else "brak", "Reklamuje sie": ", ".join(wer["piksele"]) if wer["piksele"] else "NIE", "SSL": "TAK" if wer["ssl"] else "NIE", "Rezerwacja": "TAK" if wer["ma_rezerwacje"] else "NIE", "Problemy WWW": " | ".join(wer["problemy"]) if wer["problemy"] else "OK", "AI Score": score, "Strata/mc (PLN)": strata, "Szansa %": ai.get("szansa",50), "Problem": ai.get("problem",""), "SMS": ai.get("sms",""), "Call": ai.get("call",""), "Email temat": ai.get("email_temat",""), "Email tresc": ai.get("email_tresc",""), "Followup 1": ai.get("followup1",""), "Followup 2": ai.get("followup2",""), "Odpowiedz na opinie": ai.get("odpowiedz_na_opinie",""), "Google Check": google_check_url, "Score wizytowki": score_wiz, "Braki wizytowki": len(braki_wiz), "Lista brakow wizytowki": " | ".join(braki_wiz) if braki_wiz else "OK", "Wizytowka": (f"https://www.google.com/maps?cid={f['cid']}" if f.get("cid") else google_check_url)})
         bar.progress(100); msg.empty(); stats_box.empty(); bar.empty()
         if not rows:
             st.warning(f"Brak wynikow. Zmien filtry.")
@@ -1257,6 +1275,7 @@ if st.session_state.tryb_modulu == "B2B":
                     f"sieciówki: **{diag['sieciowki']}** → brak tel: **{diag['telefon']}** → "
                     f"opinie poza zakresem: **{diag['opinie']}** → "
                     f"wizytówka OK (odrzucone przez filtr): **{diag['wizytowka']}** → "
+                    f"bez strony (to leady pod STRONE, nie wizytowke): **{diag.get('brak_strony_wiz', 0)}** → "
                     f"ma stronę (odrzucone): **{diag['ma_strone']}** → "
                     f"zbyt niski score: **{diag['score']}** → wyników: **0**")
             st.stop()
@@ -1296,7 +1315,10 @@ if st.session_state.tryb_modulu == "B2B":
             with st.expander("📈 Szansa i diagnoza problemu"):
                 st.dataframe(df[["Nazwa","WWW","Szansa %","Problem","Google Check"]], use_container_width=True, hide_index=True, column_config={"Szansa %": st.column_config.ProgressColumn("Szansa %", min_value=0, max_value=100, format="%d%%", help="Szacowana szansa, ze ta firma kupi Twoja usluge - na podstawie diagnozy AI."), "Problem": st.column_config.TextColumn("Problem", help="Glowny problem wykryty przez AI - uzyj go jako 'haczyka' w pierwszej rozmowie z leadem."), "Google Check": st.column_config.LinkColumn("🔍 Sprawdź w Google", display_text="Sprawdź →", help="Kliknij przed kontaktem — upewnij sie ze firma naprawde nie ma strony.")})
             with st.expander("📍 Wizytowka Google Maps — co jest do poprawy"):
-                st.dataframe(df[["Nazwa","Opinie","Ocena Google","Braki wizytowki","Score wizytowki","Lista brakow wizytowki","Wizytowka"]], use_container_width=True, hide_index=True, column_config={
+                st.dataframe(df[["Typ leada","Nazwa","Opinie","Ocena Google","Braki wizytowki","Score wizytowki","Lista brakow wizytowki","Plan optymalizacji","Wycena uslugi","Wizytowka"]], use_container_width=True, hide_index=True, column_config={
+                    "Typ leada": st.column_config.TextColumn("Typ leada", help="WIZYTOWKA = pitch optymalizacji wizytowki Google. STRONA WWW = pitch budowy/poprawy strony. Nie mieszaj ich w jednej kampanii."),
+                    "Plan optymalizacji": st.column_config.TextColumn("Plan optymalizacji", help="Konkretne kroki do wykonania - to jest to, co sprzedajesz."),
+                    "Wycena uslugi": st.column_config.TextColumn("Wycena", help="Sugerowana wycena dopasowana do wielkosci firmy i branzy."),
                     "Braki wizytowki": st.column_config.NumberColumn("Braki", help="Ile konkretnych brakow wykryto w wizytowce Google Maps tej firmy."),
                     "Score wizytowki": st.column_config.ProgressColumn("Score wizytowki", min_value=0, max_value=99, format="%d/99", help="Jak bardzo wizytowka wymaga optymalizacji. Wyzej = latwiejszy argument na sprzedaz uslugi optymalizacji wizytowki."),
                     "Lista brakow wizytowki": st.column_config.TextColumn("Co jest do poprawy", help="Konkretne braki - uzyj ich jako argumentow w rozmowie."),
