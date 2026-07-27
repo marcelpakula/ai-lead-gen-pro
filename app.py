@@ -296,7 +296,7 @@ def szukaj_maps(q, sk, limit=20):
             _places = r.json().get("places", [])
             if _places and "_debug_place" not in st.session_state:
                 st.session_state["_debug_place"] = _places[0]
-            return [{"nazwa": p.get("title","?"), "telefon": p.get("phoneNumber","brak"), "www": p.get("website","brak"), "opinie": p.get("ratingCount",0), "ocena": p.get("rating",0), "adres": p.get("address","?"), "kategoria": p.get("category",""), "cid": p.get("cid",""), "zdjecie": p.get("thumbnailUrl","") or p.get("imageUrl",""), "godziny": p.get("openingHours","") or p.get("hours",""), "typy": p.get("types",[]) or ([p.get("type")] if p.get("type") else []), "opis": p.get("description",""), "cennik": p.get("priceLevel","")} for p in _places]
+            return [{"nazwa": p.get("title","?"), "telefon": p.get("phoneNumber","brak"), "www": p.get("website","brak"), "opinie": p.get("ratingCount",0), "ocena": p.get("rating",0), "adres": p.get("address","?"), "kategoria": p.get("type","") or (p.get("types") or [""])[0], "cid": p.get("cid",""), "zdjecie": p.get("thumbnailUrl","") or p.get("imageUrl",""), "godziny": p.get("openingHours","") or p.get("hours",""), "typy": p.get("types",[]) or ([p.get("type")] if p.get("type") else []), "opis": p.get("description",""), "cennik": p.get("priceLevel","")} for p in _places]
         except:
             return []
     wyniki = _strona(1)
@@ -619,6 +619,12 @@ def status_leada(score):
     else: return "COLD"
 
 # ══ MODUL MAPS — audyt i wycena optymalizacji wizytowki Google Maps ══
+def status_wizytowki(score):
+    """Progi dopasowane do skali score wizytowki (inna niz skala leada pod strone WWW)."""
+    if score >= 62: return "HOT"
+    elif score >= 48: return "WARM"
+    else: return "COLD"
+
 SOCIAL_ZAMIAST_STRONY = ("instagram.com", "facebook.com", "fb.com", "linktr.ee", "tiktok.com", "booksy.com")
 
 def _www_to_social(url):
@@ -742,7 +748,11 @@ Zwroc JSON z polami: diagnoza, plan, sms, call, email_temat, email_tresc, wycena
 
 KLUCZOWA ZASADA: nie proponuj budowy strony WWW. Twoja usluga to: uzupelnienie i optymalizacja wizytowki Google, zdobywanie opinii, dodawanie zdjec i postow, ustawienie kategorii i atrybutow, odpowiadanie na opinie, pozycjonowanie w lokalnym pakiecie (mapka TOP3).
 
-ZAKAZANE FRAZY: "Zauwazylismy, ze...", "Chetnie pomozemy", "Oferujemy kompleksowe uslugi", "szeroka gama rozwiazan".
+ZAKAZANE FRAZY (uzycie dyskwalifikuje wiadomosc): "Zauwazylismy, ze...", "Zauwazylem, ze...", "Widzimy, ze...", "Widzielismy...", "Sprawdzilismy Panstwa wizytowke", "Chetnie pomozemy", "Oferujemy kompleksowe uslugi", "szeroka gama rozwiazan".
+
+FORMA ZWRACANIA SIE: do tradycyjnych lokalnych biznesow (restauracje, warsztaty, gabinety, uslugi) pisz FORMALNIE — "Dzien dobry", forma Pan/Pani/Panstwo. Nie zaczynaj od "Czesc" ani "Hej", to spoufalanie ktore w tej grupie odbija.
+
+ZASADA UCZCIWOSCI: zarzucaj TYLKO to, co jest na liscie wykrytych brakow. Nie wymyslaj brakow, ktorych tam nie ma (np. nie pisz o braku zdjec, jesli zdjecie nie figuruje jako brak) — klient sprawdzi wizytowke przy telefonie i stracisz wiarygodnosc.
 
 Struktura JSON:
 {
@@ -760,6 +770,12 @@ Struktura JSON:
         if wynik is None: return FALLBACK
         for k, v in FALLBACK.items():
             if k not in wynik: wynik[k] = v
+        # Claude czasem zwraca wycene jako obiekt zamiast tekstu — splaszcz do czytelnej linii
+        w = wynik.get("wycena")
+        if isinstance(w, dict):
+            wynik["wycena"] = " | ".join(f"{k.replace('_',' ')}: {v}" for k, v in w.items())
+        elif isinstance(w, list):
+            wynik["wycena"] = " | ".join(str(x) for x in w)
         return wynik
     except Exception:
         return FALLBACK
@@ -1300,7 +1316,7 @@ if st.session_state.tryb_modulu == "B2B":
                 ai = analiza_claude_b2b(f, branza, AK, wer, score, strata, lok, opinie_tekst)
                 plan_opt = ""
                 wycena = ""
-            rows.append({"Typ leada": typ_leada, "Plan optymalizacji": plan_opt, "Wycena uslugi": wycena, "Status": status_leada(score), "Nazwa": f["nazwa"], "Telefon": f["telefon"], "WWW": f["www"], "Adres": f["adres"], "Opinie": f["opinie"], "Ocena Google": f["ocena"], "Ocena strony": wer["ocena_www"], "Technologia": wer["technologia"], "PageSpeed": wer["pagespeed"] if wer["pagespeed"] is not None else "-", "Email": wer["email"] if wer["email"] else "brak", "Reklamuje sie": ", ".join(wer["piksele"]) if wer["piksele"] else "NIE", "SSL": "TAK" if wer["ssl"] else "NIE", "Rezerwacja": "TAK" if wer["ma_rezerwacje"] else "NIE", "Problemy WWW": " | ".join(wer["problemy"]) if wer["problemy"] else "OK", "AI Score": score, "Strata/mc (PLN)": strata, "Szansa %": ai.get("szansa",50), "Problem": ai.get("problem",""), "SMS": ai.get("sms",""), "Call": ai.get("call",""), "Email temat": ai.get("email_temat",""), "Email tresc": ai.get("email_tresc",""), "Followup 1": ai.get("followup1",""), "Followup 2": ai.get("followup2",""), "Odpowiedz na opinie": ai.get("odpowiedz_na_opinie",""), "Google Check": google_check_url, "Score wizytowki": score_wiz, "Braki wizytowki": len(braki_wiz), "Lista brakow wizytowki": " | ".join(braki_wiz) if braki_wiz else "OK", "Wizytowka": (f"https://www.google.com/maps?cid={f['cid']}" if f.get("cid") else google_check_url)})
+            rows.append({"Typ leada": typ_leada, "Plan optymalizacji": plan_opt, "Wycena uslugi": wycena, "Status": (status_wizytowki(score_wiz) if tylko_wiz else status_leada(score)), "Nazwa": f["nazwa"], "Telefon": f["telefon"], "WWW": f["www"], "Adres": f["adres"], "Opinie": f["opinie"], "Ocena Google": f["ocena"], "Ocena strony": wer["ocena_www"], "Technologia": wer["technologia"], "PageSpeed": wer["pagespeed"] if wer["pagespeed"] is not None else "-", "Email": wer["email"] if wer["email"] else "brak", "Reklamuje sie": ", ".join(wer["piksele"]) if wer["piksele"] else "NIE", "SSL": "TAK" if wer["ssl"] else "NIE", "Rezerwacja": "TAK" if wer["ma_rezerwacje"] else "NIE", "Problemy WWW": " | ".join(wer["problemy"]) if wer["problemy"] else "OK", "AI Score": score, "Strata/mc (PLN)": strata, "Szansa %": ai.get("szansa",50), "Problem": ai.get("problem",""), "SMS": ai.get("sms",""), "Call": ai.get("call",""), "Email temat": ai.get("email_temat",""), "Email tresc": ai.get("email_tresc",""), "Followup 1": ai.get("followup1",""), "Followup 2": ai.get("followup2",""), "Odpowiedz na opinie": ai.get("odpowiedz_na_opinie",""), "Google Check": google_check_url, "Score wizytowki": score_wiz, "Braki wizytowki": len(braki_wiz), "Lista brakow wizytowki": " | ".join(braki_wiz) if braki_wiz else "OK", "Wizytowka": (f"https://www.google.com/maps?cid={f['cid']}" if f.get("cid") else google_check_url)})
         bar.progress(100); msg.empty(); stats_box.empty(); bar.empty()
         if not rows:
             st.warning(f"Brak wynikow. Zmien filtry.")
@@ -1501,7 +1517,7 @@ elif st.session_state.tryb_modulu == "MAPS":
             maps_link = f"https://www.google.com/maps?cid={f['cid']}" if f.get("cid") else "https://www.google.com/maps/search/" + requests.utils.quote(f["nazwa"] + " " + f.get("adres", ""))
             plan_lista = ai_m.get("plan", [])
             rows_m.append({
-                "Status": status_leada(score_m), "Nazwa": f["nazwa"], "Telefon": f.get("telefon", "brak"),
+                "Status": status_wizytowki(score_m), "Nazwa": f["nazwa"], "Telefon": f.get("telefon", "brak"),
                 "Opinie": f.get("opinie", 0), "Ocena Google": f.get("ocena", 0),
                 "Braki": len(braki), "Score wizytowki": score_m,
                 "Potencjal/mc (PLN)": potencjal, "Wycena uslugi": ai_m.get("wycena", ""),
