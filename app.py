@@ -293,7 +293,10 @@ def szukaj_maps(q, sk, limit=20):
             if page > 1:
                 payload["page"] = page
             r = requests.post("https://google.serper.dev/maps", headers={"X-API-KEY": sk, "Content-Type": "application/json"}, json=payload, timeout=12)
-            return [{"nazwa": p.get("title","?"), "telefon": p.get("phoneNumber","brak"), "www": p.get("website","brak"), "opinie": p.get("ratingCount",0), "ocena": p.get("rating",0), "adres": p.get("address","?"), "kategoria": p.get("category",""), "cid": p.get("cid",""), "zdjecie": p.get("thumbnailUrl","") or p.get("imageUrl",""), "godziny": p.get("openingHours","") or p.get("hours",""), "typy": p.get("types",[]) or ([p.get("type")] if p.get("type") else []), "rezerwacja_maps": bool(p.get("bookingLinks"))} for p in r.json().get("places",[])]
+            _places = r.json().get("places", [])
+            if _places and "_debug_place" not in st.session_state:
+                st.session_state["_debug_place"] = _places[0]
+            return [{"nazwa": p.get("title","?"), "telefon": p.get("phoneNumber","brak"), "www": p.get("website","brak"), "opinie": p.get("ratingCount",0), "ocena": p.get("rating",0), "adres": p.get("address","?"), "kategoria": p.get("category",""), "cid": p.get("cid",""), "zdjecie": p.get("thumbnailUrl","") or p.get("imageUrl",""), "godziny": p.get("openingHours","") or p.get("hours",""), "typy": p.get("types",[]) or ([p.get("type")] if p.get("type") else []), "rezerwacja_maps": bool(p.get("bookingLinks"))} for p in _places]
         except:
             return []
     wyniki = _strona(1)
@@ -1430,7 +1433,7 @@ elif st.session_state.tryb_modulu == "MAPS":
             lok_m = kp_m + " (+" + pr_m + ")"
 
     fm1, fm2 = st.columns(2)
-    with fm1: max_opinii_m = st.slider("Maks opinii (firmy powyzej tego progu prowadza wizytowke dobrze)", 5, 300, 60, key="maps_max_opinii")
+    with fm1: max_opinii_m = st.slider("Maks opinii (0 = bez limitu)", 0, 3000, 0, step=50, key="maps_max_opinii", help="Duzo opinii NIE znaczy dobra wizytowka - restauracja z 800 opiniami tez moze nie miec godzin, zdjec i kategorii. Zostaw 0 zeby nie odcinac takich firm.")
     with fm2: min_score_m = st.slider("Min Score wizytowki (jak bardzo wymaga poprawy)", 0, 99, 55, key="maps_min_score")
 
     st.markdown("<br>", unsafe_allow_html=True)
@@ -1456,7 +1459,7 @@ elif st.session_state.tryb_modulu == "MAPS":
         diag_m = {"serper": len(firmy_m), "sieciowki": 0, "duzo_opinii": 0, "score": 0}
         for i, f in enumerate(firmy_m):
             if wykl and jest_sieciowka(f["nazwa"]): diag_m["sieciowki"] += 1; continue
-            if (f.get("opinie", 0) or 0) > max_opinii_m: diag_m["duzo_opinii"] += 1; continue
+            if max_opinii_m > 0 and (f.get("opinie", 0) or 0) > max_opinii_m: diag_m["duzo_opinii"] += 1; continue
             barm.progress(50 + int(40 * i / max(len(firmy_m), 1))); msgm.info("Audytuje: " + f["nazwa"])
             braki = audyt_wizytowki(f)
             score_m = oblicz_score_wizytowki(f)
@@ -1483,6 +1486,10 @@ elif st.session_state.tryb_modulu == "MAPS":
         if not rows_m:
             st.warning("Brak wynikow. Zmien filtry.")
             st.info(f"📊 Diagnoza: Serper zwrocil **{diag_m['serper']}** wizytowek → sieciowki: **{diag_m['sieciowki']}** → za duzo opinii (dobrze prowadzone): **{diag_m['duzo_opinii']}** → score ponizej progu: **{diag_m['score']}** → wynikow: **0**")
+            if "_debug_place" in st.session_state:
+                with st.expander("🔧 Surowe dane z Google Maps (pokaz Claude'owi ten zrzut)"):
+                    st.write("**Pola ktore Serper faktycznie zwraca:**", list(st.session_state["_debug_place"].keys()))
+                    st.json(st.session_state["_debug_place"])
             st.stop()
         df_m = pd.DataFrame(rows_m).sort_values("Score wizytowki", ascending=False).reset_index(drop=True)
         zapisz_skan(st.session_state.kod_info)
@@ -1497,6 +1504,10 @@ elif st.session_state.tryb_modulu == "MAPS":
     if "maps_df" in st.session_state:
         df_m = st.session_state["maps_df"]; branza_m2 = st.session_state["maps_branza"]; lok_m2 = st.session_state["maps_lok"]
         st.markdown(f'<div class="success-box">Znaleziono {len(df_m)} wizytowek do optymalizacji | {branza_m2} | {lok_m2}</div>', unsafe_allow_html=True)
+        if "_debug_place" in st.session_state:
+            with st.expander("🔧 Surowe dane z Google Maps (pokaz Claude'owi ten zrzut)"):
+                st.write("**Pola ktore Serper faktycznie zwraca:**", list(st.session_state["_debug_place"].keys()))
+                st.json(st.session_state["_debug_place"])
         st.markdown("<br>", unsafe_allow_html=True)
         hot_m = int((df_m["Status"] == "HOT").sum()); zero_op = int((df_m["Opinie"] == 0).sum())
         sr_braki = round(float(df_m["Braki"].mean()), 1); sr_score_m = int(df_m["Score wizytowki"].mean())
