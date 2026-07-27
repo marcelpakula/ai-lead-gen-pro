@@ -296,7 +296,7 @@ def szukaj_maps(q, sk, limit=20):
             _places = r.json().get("places", [])
             if _places and "_debug_place" not in st.session_state:
                 st.session_state["_debug_place"] = _places[0]
-            return [{"nazwa": p.get("title","?"), "telefon": p.get("phoneNumber","brak"), "www": p.get("website","brak"), "opinie": p.get("ratingCount",0), "ocena": p.get("rating",0), "adres": p.get("address","?"), "kategoria": p.get("category",""), "cid": p.get("cid",""), "zdjecie": p.get("thumbnailUrl","") or p.get("imageUrl",""), "godziny": p.get("openingHours","") or p.get("hours",""), "typy": p.get("types",[]) or ([p.get("type")] if p.get("type") else []), "rezerwacja_maps": bool(p.get("bookingLinks"))} for p in _places]
+            return [{"nazwa": p.get("title","?"), "telefon": p.get("phoneNumber","brak"), "www": p.get("website","brak"), "opinie": p.get("ratingCount",0), "ocena": p.get("rating",0), "adres": p.get("address","?"), "kategoria": p.get("category",""), "cid": p.get("cid",""), "zdjecie": p.get("thumbnailUrl","") or p.get("imageUrl",""), "godziny": p.get("openingHours","") or p.get("hours",""), "typy": p.get("types",[]) or ([p.get("type")] if p.get("type") else []), "opis": p.get("description",""), "cennik": p.get("priceLevel","")} for p in _places]
         except:
             return []
     wyniki = _strona(1)
@@ -619,44 +619,74 @@ def status_leada(score):
     else: return "COLD"
 
 # ══ MODUL MAPS — audyt i wycena optymalizacji wizytowki Google Maps ══
+SOCIAL_ZAMIAST_STRONY = ("instagram.com", "facebook.com", "fb.com", "linktr.ee", "tiktok.com", "booksy.com")
+
+def _www_to_social(url):
+    """Wizytowka linkuje do profilu social zamiast do wlasnej strony."""
+    return any(s in str(url).lower() for s in SOCIAL_ZAMIAST_STRONY)
+
 def audyt_wizytowki(f):
-    """Wykrywa konkretne braki w wizytowce Google Maps danej firmy."""
+    """Wykrywa braki w wizytowce Google Maps — wylacznie na polach ktore Serper faktycznie zwraca."""
     braki = []
     opinie = f.get("opinie", 0) or 0
     ocena = f.get("ocena", 0) or 0
+    www = f.get("www", "brak")
+    typy = f.get("typy", []) or []
+
     if opinie == 0: braki.append("Zero opinii — wizytowka niewidoczna w rankingu lokalnym")
     elif opinie < 10: braki.append(f"Bardzo malo opinii ({opinie}) — konkurencja wypycha ich z TOP3")
     elif opinie < 30: braki.append(f"Malo opinii ({opinie}) — slaby sygnal zaufania dla Google")
+    elif opinie < 100: braki.append(f"Umiarkowana liczba opinii ({opinie}) — jest pole do wzrostu")
+
     if 0 < ocena < 3.5: braki.append(f"Niska ocena ({ocena}/5) — klienci wybieraja konkurencje")
-    elif 3.5 <= ocena < 4.3: braki.append(f"Ocena ponizej rynkowej sredniej ({ocena}/5)")
+    elif 3.5 <= ocena < 4.0: braki.append(f"Slaba ocena ({ocena}/5) — wymaga pracy nad reputacja")
+    elif 4.0 <= ocena < 4.5: braki.append(f"Ocena ponizej lokalnej czolowki ({ocena}/5)")
+
     if f.get("telefon", "brak") in ["brak", "sprawdz na stronie", ""]:
         braki.append("Brak numeru telefonu — klient nie moze zadzwonic jednym kliknieciem")
     if not str(f.get("kategoria", "")).strip():
-        braki.append("Brak ustawionej kategorii dzialalnosci — Google nie wie za co ich pozycjonowac")
+        braki.append("Brak kategorii dzialalnosci — Google nie wie za co ich pozycjonowac")
+    elif len(typy) <= 1:
+        braki.append("Tylko jedna kategoria — traca ruch z zapytan pobocznych")
     if not f.get("zdjecie", ""):
         braki.append("Brak zdjecia glownego — profil wyglada na porzucony")
     if not f.get("godziny", ""):
-        braki.append("Brak godzin otwarcia — klienci nie wiedza kiedy przyjsc")
-    if not f.get("rezerwacja_maps", False):
-        braki.append("Brak przycisku rezerwacji/umowienia wizyty")
+        braki.append("Brak godzin otwarcia — Google obniza pozycje niekompletnych wizytowek")
+    if not str(f.get("opis", "")).strip():
+        braki.append("Brak opisu firmy — zmarnowane miejsce na slowa kluczowe")
+    if www in ["brak", "sprawdz na stronie", ""]:
+        braki.append("Wizytowka nie linkuje nigdzie — kazde kliknięcie 'Strona' przepada")
+    elif _www_to_social(www):
+        braki.append("Wizytowka linkuje do profilu social zamiast do wlasnej strony")
     return braki
 
 def oblicz_score_wizytowki(f):
-    """Score 0-99: jak bardzo wizytowka tej firmy wymaga optymalizacji."""
-    s = 25
+    """Score 0-99: jak bardzo wizytowka wymaga optymalizacji. Kalibracja na realnych danych Serper."""
+    s = 18
     opinie = f.get("opinie", 0) or 0
     ocena = f.get("ocena", 0) or 0
-    if opinie == 0: s += 30
-    elif opinie < 10: s += 22
-    elif opinie < 30: s += 14
-    elif opinie < 60: s += 7
-    if 0 < ocena < 3.5: s += 18
-    elif 3.5 <= ocena < 4.3: s += 10
-    elif 4.3 <= ocena < 4.6: s += 4
-    if f.get("telefon", "brak") in ["brak", "sprawdz na stronie", ""]: s += 12
-    if not str(f.get("kategoria", "")).strip(): s += 8
-    if not f.get("zdjecie", ""): s += 8
-    if not f.get("godziny", ""): s += 5
+    www = f.get("www", "brak")
+    typy = f.get("typy", []) or []
+
+    if opinie == 0: s += 24
+    elif opinie < 10: s += 19
+    elif opinie < 30: s += 13
+    elif opinie < 60: s += 8
+    elif opinie < 150: s += 4
+
+    if 0 < ocena < 3.5: s += 16
+    elif 3.5 <= ocena < 4.0: s += 11
+    elif 4.0 <= ocena < 4.5: s += 6
+    elif 4.5 <= ocena < 4.7: s += 2
+
+    if f.get("telefon", "brak") in ["brak", "sprawdz na stronie", ""]: s += 14
+    if not str(f.get("kategoria", "")).strip(): s += 11
+    elif len(typy) <= 1: s += 5
+    if not f.get("zdjecie", ""): s += 12
+    if not f.get("godziny", ""): s += 11
+    if not str(f.get("opis", "")).strip(): s += 9
+    if www in ["brak", "sprawdz na stronie", ""]: s += 6
+    elif _www_to_social(www): s += 8
     return min(s, 99)
 
 def oblicz_potencjal_maps(f, braki, branza=""):
@@ -1130,7 +1160,7 @@ with st.sidebar:
     bw = st.checkbox("Tylko BEZ strony WWW")
     tylko_wiz = st.checkbox("Tylko wizytowki do poprawy", help="Pokaz wylacznie firmy, ktore maja wizytowke w Google Maps prowadzona zle: malo opinii, niska ocena, brak zdjecia, brak kategorii, brak telefonu. Sprzedajesz im optymalizacje wizytowki, nie strone WWW.")
     if tylko_wiz:
-        prog_wiz = st.slider("Min Score wizytowki", 0, 99, 55, help="Im wyzej, tym gorzej prowadzona wizytowka (i latwiejszy argument sprzedazowy).")
+        prog_wiz = st.slider("Min Score wizytowki", 0, 99, 40, help="Im wyzej, tym gorzej prowadzona wizytowka (i latwiejszy argument sprzedazowy).")
     else:
         prog_wiz = 0
     bt = st.checkbox("Tylko Z telefonem", value=True)
@@ -1434,7 +1464,7 @@ elif st.session_state.tryb_modulu == "MAPS":
 
     fm1, fm2 = st.columns(2)
     with fm1: max_opinii_m = st.slider("Maks opinii (0 = bez limitu)", 0, 3000, 0, step=50, key="maps_max_opinii", help="Duzo opinii NIE znaczy dobra wizytowka - restauracja z 800 opiniami tez moze nie miec godzin, zdjec i kategorii. Zostaw 0 zeby nie odcinac takich firm.")
-    with fm2: min_score_m = st.slider("Min Score wizytowki (jak bardzo wymaga poprawy)", 0, 99, 55, key="maps_min_score")
+    with fm2: min_score_m = st.slider("Min Score wizytowki (jak bardzo wymaga poprawy)", 0, 99, 40, key="maps_min_score")
 
     st.markdown("<br>", unsafe_allow_html=True)
     _, bcm, _ = st.columns([1,2,1])
@@ -1463,6 +1493,7 @@ elif st.session_state.tryb_modulu == "MAPS":
             barm.progress(50 + int(40 * i / max(len(firmy_m), 1))); msgm.info("Audytuje: " + f["nazwa"])
             braki = audyt_wizytowki(f)
             score_m = oblicz_score_wizytowki(f)
+            diag_m["max_score"] = max(diag_m.get("max_score", 0), score_m)
             if score_m < min_score_m: diag_m["score"] += 1; continue
             potencjal = oblicz_potencjal_maps(f, braki, branza_m)
             opinie_txt = pobierz_opinie(f.get("cid", ""), SK) if score_m >= 70 else []
@@ -1486,6 +1517,7 @@ elif st.session_state.tryb_modulu == "MAPS":
         if not rows_m:
             st.warning("Brak wynikow. Zmien filtry.")
             st.info(f"📊 Diagnoza: Serper zwrocil **{diag_m['serper']}** wizytowek → sieciowki: **{diag_m['sieciowki']}** → za duzo opinii (dobrze prowadzone): **{diag_m['duzo_opinii']}** → score ponizej progu: **{diag_m['score']}** → wynikow: **0**")
+            st.warning(f"Najwyzszy score wizytowki w tym skanie: **{diag_m.get('max_score', 0)}/99**, a Twoj prog to **{min_score_m}**. Zjedz suwakiem 'Min Score wizytowki' ponizej tej liczby, albo sprobuj mniejszej miejscowosci — w duzym miescie wizytowki sa zwykle dobrze prowadzone.")
             if "_debug_place" in st.session_state:
                 with st.expander("🔧 Surowe dane z Google Maps (pokaz Claude'owi ten zrzut)"):
                     st.write("**Pola ktore Serper faktycznie zwraca:**", list(st.session_state["_debug_place"].keys()))
